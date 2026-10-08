@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  页面一：首页（index.html）
+  作用：介绍本项目、介绍班级，并提供通往其他两个页面的导航。
+  ============================================================
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <!-- 移动端适配：让页面在手机上按设备宽度渲染 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>首页 - 班级信息台</title>
+  <!-- 引入公共样式表 -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ========== 顶部导航栏（三个页面通用） ========== -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <!-- 站点 Logo，点击回到首页 -->
+      <a class="logo" href="index.html">🧩 计科 2026 班级信息台</a>
+      <nav class="nav">
+        <a href="index.html" class="active">首页</a>
+        <a href="roster.html">班级名单</a>
+        <a href="form.html">信息录入</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ========== 主体内容 ========== -->
+  <main class="container">
+
+    <!-- 首屏欢迎区 -->
+    <section class="hero">
+      <h1>班级信息静态网页系统</h1>
+      <p class="subtitle">面向班级负责人的轻量工具 · 纯静态 · 打开即用</p>
+    </section>
+
+    <!-- 模块一：项目介绍 -->
+    <section class="card">
+      <h2>项目介绍</h2>
+      <p>
+        本项目是一个用原生 HTML 搭建的班级信息管理页面集合，为班级负责人日常事务服务。
+        不需要服务器、不需要数据库，用浏览器直接打开 <code>index.html</code> 就能使用，
+        也可以整体拷贝到 U 盘或上传到任意静态托管平台。
+      </p>
+      <p>系统包含三个页面：</p>
+      <p>
+        ① <strong>首页</strong>——介绍项目与班级，提供功能入口；<br>
+        ② <strong>班级名单</strong>——用表格展示全班同学的姓名、学号与联系方式；<br>
+        ③ <strong>信息录入</strong>——填写姓名和学号并提交。
+      </p>
+    </section>
+
+    <!-- 模块二：班级简介 -->
+    <section class="card">
+      <h2>班级简介</h2>
+      <p>
+        我们是<strong>安徽师范大学 计算机科学与技术专业 2026 级</strong>的学生。
+        班级现有同学 12 人，日常事务包括名单统计、信息收集、通知传达与活动组织。
+      </p>
+      <p>
+        班级信息台的目标很朴素：把「查名单」和「收信息」这两件高频小事，
+        做成一个不用登录、不用联网也能查的干净页面。
+      </p>
+    </section>
+
+    <!-- 模块三：导航入口，卡片式跳转链接 -->
+    <section class="card">
+      <h2>快速导航</h2>
+      <div class="link-grid">
+        <!-- 点击整块卡片即可跳转，提升可点击面积 -->
+        <a class="link-box" href="roster.html">
+          <strong>📋 班级名单 →</strong>
+          <span>查看全班同学的姓名、学号与联系方式</span>
+        </a>
+        <a class="link-box" href="form.html">
+          <strong>✍️ 信息录入 →</strong>
+          <span>填写姓名和学号，提交录入</span>
+        </a>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========== 页脚 ========== -->
+  <footer class="site-footer">
+    <p>班级信息静态网页系统 &copy; 2026 · 计算机科学与技术 2026 级</p>
+  </footer>
+
+</body>
+</html>

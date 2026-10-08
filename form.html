@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  页面三：信息收集表单（form.html）
+  作用：录入姓名与学号，点击提交按钮。
+  说明：这是纯静态页面，没有后端服务器，因此数据不会被真正保存。
+        此处用一小段原生 JS 做「提交反馈提示」，仅用于演示交互流程；
+        若后续接入后端，只需把 <form> 的 action 指向接口地址即可。
+  ============================================================
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>信息录入 - 班级信息台</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ========== 顶部导航栏 ========== -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="logo" href="index.html">🧩 计科 2026 班级信息台</a>
+      <nav class="nav">
+        <a href="index.html">首页</a>
+        <a href="roster.html">班级名单</a>
+        <a href="form.html" class="active">信息录入</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ========== 主体内容 ========== -->
+  <main class="container">
+
+    <section class="card">
+      <h2>信息录入</h2>
+      <p>请填写同学的基本信息后点击「提交」。带 <span class="required">*</span> 的为必填项。</p>
+
+      <!-- 提交成功后的提示条，默认隐藏，由下方 JS 控制显示 -->
+      <div class="msg" id="msg">✅ 信息已提交（静态页面演示，数据未被真实保存）</div>
+
+      <!--
+        表单：
+        - action="#" 表示暂不提交到任何后端地址
+        - onsubmit 交给 JS 处理，避免页面刷新
+      -->
+      <form id="infoForm" action="#" onsubmit="handleSubmit(event)">
+
+        <!-- 字段一：姓名 -->
+        <div class="form-item">
+          <label for="name">姓名 <span class="required">*</span></label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            placeholder="请输入姓名，例如：张三"
+            required>  <!-- required 让浏览器自动做非空校验 -->
+          <p class="form-hint">与学籍一致的正式姓名</p>
+        </div>
+
+        <!-- 字段二：学号 -->
+        <div class="form-item">
+          <label for="stuId">学号 <span class="required">*</span></label>
+          <input
+            type="text"
+            id="stuId"
+            name="stuId"
+            placeholder="请输入 10 位学号，例如：2026110113"
+            pattern="\d{10}"              <!-- 正则校验：必须是 10 位数字 -->
+            title="学号应为 10 位数字"
+            required>
+          <p class="form-hint">10 位数字，如 2026110113</p>
+        </div>
+
+        <!-- 提交按钮 -->
+        <button type="submit" class="btn-submit">提 交</button>
+
+      </form>
+    </section>
+
+    <!-- 提交说明 -->
+    <section class="card">
+      <h2>说明</h2>
+      <p>
+        当前为静态演示版本，提交只在浏览器本地做一次校验与提示，不会把数据发送到任何地方。
+        如需真正收集信息，可把表单的 <code>action</code> 改成后端接口地址，
+        或改用腾讯文档 / 金山表单等在线收集工具作为过渡方案。
+      </p>
+    </section>
+
+  </main>
+
+  <!-- ========== 页脚 ========== -->
+  <footer class="site-footer">
+    <p>班级信息静态网页系统 &copy; 2026 · 计算机科学与技术 2026 级</p>
+  </footer>
+
+  <!-- ==========
+       原生 JS：仅用于演示提交交互
+       - 阻止表单默认的页面刷新行为
+       - 显示提示条，并清空输入框
+       ========== -->
+  <script>
+    function handleSubmit(event) {
+      event.preventDefault();                       // 阻止默认提交（页面刷新）
+
+      var name = document.getElementById('name').value.trim();
+      var stuId = document.getElementById('stuId').value.trim();
+
+      // 简易二次校验：浏览器 required 已拦截空值，这里做兜底
+      if (!name || !stuId) {
+        alert('请填写完整的姓名和学号');
+        return;
+      }
+
+      // 显示成功提示条
+      var msg = document.getElementById('msg');
+      msg.textContent = '✅ 已提交：' + name + '（学号 ' + stuId + '）— 静态页面演示，数据未被真实保存';
+      msg.style.display = 'block';
+
+      // 清空表单，方便继续录入下一位同学
+      document.getElementById('infoForm').reset();
+    }
+  </script>
+
+</body>
+</html>

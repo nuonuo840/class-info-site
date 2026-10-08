@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  页面二：班级名单（roster.html）
+  作用：用 table 表格展示全部同学信息。
+        结构：table > thead > tr > th（表头）
+              table > tbody > tr > td（数据行）
+  ============================================================
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>班级名单 - 班级信息台</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ========== 顶部导航栏 ========== -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="logo" href="index.html">🧩 计科 2026 班级信息台</a>
+      <nav class="nav">
+        <a href="index.html">首页</a>
+        <!-- 当前页面高亮：给 a 标签加 active 类 -->
+        <a href="roster.html" class="active">班级名单</a>
+        <a href="form.html">信息录入</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ========== 主体内容 ========== -->
+  <main class="container">
+
+    <section class="card">
+      <h2>班级名单</h2>
+      <p>下表为计算机科学与技术 2026 级全体同学信息。数据为示例内容，请负责人替换为真实名单。</p>
+
+      <!-- 表格外层加一层容器，窄屏时可横向滚动 -->
+      <div class="table-wrap">
+        <table>
+          <!-- 表头 -->
+          <thead>
+            <tr>
+              <th>序号</th>
+              <th>姓名</th>
+              <th>学号</th>
+              <th>联系方式</th>
+            </tr>
+          </thead>
+
+          <!-- 表格数据体：每一行 tr 代表一位同学，每个 td 是一个单元格 -->
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>张三</td>
+              <td>2026110101</td>
+              <td>138-0000-0001</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>王雨桐</td>
+              <td>2026110102</td>
+              <td>138-0000-0002</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>陈嘉禾</td>
+              <td>2026110103</td>
+              <td>138-0000-0003</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>张思远</td>
+              <td>2026110104</td>
+              <td>138-0000-0004</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>刘星宇</td>
+              <td>2026110105</td>
+              <td>138-0000-0005</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>赵梦琪</td>
+              <td>2026110106</td>
+              <td>138-0000-0006</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>孙浩然</td>
+              <td>2026110107</td>
+              <td>138-0000-0007</td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td>周静怡</td>
+              <td>2026110108</td>
+              <td>138-0000-0008</td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td>吴子墨</td>
+              <td>2026110109</td>
+              <td>138-0000-0009</td>
+            </tr>
+            <tr>
+              <td>10</td>
+              <td>郑一鸣</td>
+              <td>2026110110</td>
+              <td>138-0000-0010</td>
+            </tr>
+            <tr>
+              <td>11</td>
+              <td>黄书瑶</td>
+              <td>2026110111</td>
+              <td>138-0000-0011</td>
+            </tr>
+            <tr>
+              <td>12</td>
+              <td>徐子涵</td>
+              <td>2026110112</td>
+              <td>138-0000-0012</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 表格下方的统计说明 -->
+      <p class="table-tip">共 12 名同学 · 数据更新于 2026-10-08</p>
+    </section>
+
+    <!-- 底部回到首页的便捷入口 -->
+    <section class="card">
+      <h2>相关操作</h2>
+      <div class="link-grid">
+        <a class="link-box" href="form.html">
+          <strong>✍️ 去录入新同学 →</strong>
+          <span>填写姓名和学号，提交信息</span>
+        </a>
+        <a class="link-box" href="index.html">
+          <strong>🏠 返回首页 →</strong>
+          <span>查看项目介绍与班级简介</span>
+        </a>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========== 页脚 ========== -->
+  <footer class="site-footer">
+    <p>班级信息静态网页系统 &copy; 2026 · 计算机科学与技术 2026 级</p>
+  </footer>
+
+</body>
+</html>
