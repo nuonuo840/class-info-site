@@ -3,27 +3,34 @@
   ============================================================
   页面三：信息收集表单（form.html）
   作用：录入姓名与学号，点击提交按钮。
-  说明：这是纯静态页面，没有后端服务器，因此数据不会被真正保存。
-        此处用一小段原生 JS 做「提交反馈提示」，仅用于演示交互流程；
-        若后续接入后端，只需把 <form> 的 action 指向接口地址即可。
+
+  数据去向：提交后由 app.js 保存进浏览器本地（localStorage），
+            刷新或关闭页面都不会丢，「班级名单」页会立刻显示出来。
+            数据不会上传到任何服务器 —— 本页依然是纯静态页面。
+            若将来需要多人协作收集，只需把 <form> 的 action
+            指向后端接口地址，其余不用改。
   ============================================================
 -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <!-- 移动端适配：让页面在手机上按设备宽度渲染 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="班级同学信息录入表单，填写姓名与学号后提交，数据保存在本机浏览器。">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <title>信息录入 - 班级信息台</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ========== 顶部导航栏 ========== -->
+  <!-- ========== 顶部导航栏（三个页面通用） ========== -->
   <header class="site-header">
     <div class="container header-inner">
       <a class="logo" href="index.html">🧩 计科 2026 班级信息台</a>
       <nav class="nav">
         <a href="index.html">首页</a>
         <a href="roster.html">班级名单</a>
+        <!-- 当前页面高亮：给 a 标签加 active 类 -->
         <a href="form.html" class="active">信息录入</a>
       </nav>
     </div>
@@ -36,37 +43,47 @@
       <h2>信息录入</h2>
       <p>请填写同学的基本信息后点击「提交」。带 <span class="required">*</span> 的为必填项。</p>
 
-      <!-- 提交成功后的提示条，默认隐藏，由下方 JS 控制显示 -->
-      <div class="msg" id="msg">✅ 信息已提交（静态页面演示，数据未被真实保存）</div>
+      <!--
+        提交结果提示条：默认隐藏（CSS 里 display:none），由脚本控制显示。
+        role="status" + aria-live 让屏幕阅读器也能读出提交结果。
+      -->
+      <div class="msg" id="msg" role="status" aria-live="polite"></div>
 
       <!--
         表单：
         - action="#" 表示暂不提交到任何后端地址
-        - onsubmit 交给 JS 处理，避免页面刷新
+        - onsubmit 交给脚本处理，避免页面刷新
       -->
       <form id="infoForm" action="#" onsubmit="handleSubmit(event)">
 
         <!-- 字段一：姓名 -->
         <div class="form-item">
           <label for="name">姓名 <span class="required">*</span></label>
+          <!-- required 让浏览器自动做非空校验 -->
           <input
             type="text"
             id="name"
             name="name"
+            class="input"
             placeholder="请输入姓名，例如：张三"
-            required>  <!-- required 让浏览器自动做非空校验 -->
+            required>
           <p class="form-hint">与学籍一致的正式姓名</p>
         </div>
 
         <!-- 字段二：学号 -->
         <div class="form-item">
           <label for="stuId">学号 <span class="required">*</span></label>
+          <!--
+            pattern 做正则校验：必须是 10 位数字
+            title 是校验不通过时浏览器原生气泡里显示的文案
+          -->
           <input
             type="text"
             id="stuId"
             name="stuId"
+            class="input"
             placeholder="请输入 10 位学号，例如：2026110113"
-            pattern="\d{10}"              <!-- 正则校验：必须是 10 位数字 -->
+            pattern="\d{10}"
             title="学号应为 10 位数字"
             required>
           <p class="form-hint">10 位数字，如 2026110113</p>
@@ -82,9 +99,13 @@
     <section class="card">
       <h2>说明</h2>
       <p>
-        当前为静态演示版本，提交只在浏览器本地做一次校验与提示，不会把数据发送到任何地方。
-        如需真正收集信息，可把表单的 <code>action</code> 改成后端接口地址，
-        或改用腾讯文档 / 金山表单等在线收集工具作为过渡方案。
+        提交后，信息会保存到<strong>你这台电脑的浏览器本地</strong>（localStorage），
+        刷新或关闭页面都不会丢失，并会立刻出现在「班级名单」页。
+      </p>
+      <p>
+        数据不会上传到任何服务器，所以换一台电脑、或换一个浏览器就看不到了。
+        如果需要多人一起收集，可以把表单的 <code>action</code> 改成后端接口地址，
+        或先用腾讯文档 / 金山表单等在线工具过渡。
       </p>
     </section>
 
@@ -95,31 +116,43 @@
     <p>班级信息静态网页系统 &copy; 2026 · 计算机类专业 2026 级</p>
   </footer>
 
-  <!-- ==========
-       原生 JS：仅用于演示提交交互
-       - 阻止表单默认的页面刷新行为
-       - 显示提示条，并清空输入框
-       ========== -->
+  <!-- 数据层：提供同学名单的读取与保存 -->
+  <script src="app.js"></script>
   <script>
+    /*
+      录入页脚本，流程：
+        1. 阻止表单默认提交（否则页面会刷新）
+        2. 做一次兜底校验（浏览器 required 已经拦掉空值，这里是双保险）
+        3. 交给数据层保存；学号重复会被拒绝
+        4. 显示结果提示条；成功时清空输入框，方便连续录入下一位同学
+    */
     function handleSubmit(event) {
-      event.preventDefault();                       // 阻止默认提交（页面刷新）
+      event.preventDefault();
 
       var name = document.getElementById('name').value.trim();
       var stuId = document.getElementById('stuId').value.trim();
+      var msg = document.getElementById('msg');
 
-      // 简易二次校验：浏览器 required 已拦截空值，这里做兜底
       if (!name || !stuId) {
         alert('请填写完整的姓名和学号');
         return;
       }
 
-      // 显示成功提示条
-      var msg = document.getElementById('msg');
-      msg.textContent = '✅ 已提交：' + name + '（学号 ' + stuId + '）— 静态页面演示，数据未被真实保存';
-      msg.style.display = 'block';
+      var result = ClassData.add({ name: name, sid: stuId });
 
-      // 清空表单，方便继续录入下一位同学
-      document.getElementById('infoForm').reset();
+      if (!result.ok) {
+        // 学号已存在：换成红色提示条
+        msg.className = 'msg msg-error';
+        msg.textContent = '学号 ' + stuId + ' 已存在，未重复录入。';
+      } else {
+        msg.className = 'msg';
+        msg.textContent = '已录入：' + name + '（学号 ' + stuId + '），当前共 '
+          + result.count + ' 名同学。数据保存在本机浏览器。';
+        // 清空表单，方便继续录入下一位
+        document.getElementById('infoForm').reset();
+      }
+
+      msg.style.display = 'block';
     }
   </script>
 

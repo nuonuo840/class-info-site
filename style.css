@@ -4,14 +4,35 @@
    ============================================================ */
 
 /* ---------- 1. 全局变量：改这里就能换整站配色 ---------- */
+/*  全站所有颜色都取自下面这组变量，没有任何一处写死颜色。
+   想把蓝色主题换成别的颜色，只需要改这一块即可。 */
 :root {
-  --primary: #2f6fed;        /* 主色（链接、按钮、高亮） */
-  --primary-dark: #1f56c4;   /* 主色加深（hover 用） */
+  /* 主色系 */
+  --primary: #2f6fed;        /* 主色：链接、按钮、当前页高亮 */
+  --primary-dark: #1f56c4;   /* 主色加深：按钮 hover */
+  --primary-soft: #eef3ff;   /* 主色浅底：导航 hover、表头背景 */
+  --primary-faint: #f8faff;  /* 主色极浅底：表格行 hover */
+  --primary-glow: rgba(47, 111, 237, .12);   /* 主色光晕：聚焦光圈、卡片阴影 */
+  --on-primary: #ffffff;     /* 压在主色底上的文字色（按钮、当前页标签） */
+
+  /* 中性色系 */
   --bg: #f5f7fb;             /* 页面背景 */
   --card: #ffffff;           /* 卡片背景 */
   --text: #1f2937;           /* 正文颜色 */
   --text-light: #6b7280;     /* 次要文字颜色 */
   --border: #e5e7eb;         /* 边框颜色 */
+
+  /* 成功状态（绿）：提交成功的提示条 */
+  --success-bg: #eaf7ee;
+  --success-border: #b7e4c7;
+  --success-text: #1b7a3d;
+
+  /* 错误状态（红）：必填星号、校验失败提示 */
+  --danger: #e5484d;
+  --danger-bg: #fdecec;
+  --danger-border: #f5b5b8;
+  --danger-text: #b3262b;
+
   --radius: 10px;            /* 统一圆角 */
 }
 
@@ -79,18 +100,18 @@ body {
   color: var(--text-light);
   text-decoration: none;
   font-size: 15px;
-  transition: all .2s;
+  transition: background-color .2s, color .2s;
 }
 
 .nav a:hover {
-  background-color: #eef3ff;
+  background-color: var(--primary-soft);
   color: var(--primary);
 }
 
 /* 当前所在页面高亮 */
 .nav a.active {
   background-color: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 
 /* ---------- 4. 通用卡片 ---------- */
@@ -149,13 +170,13 @@ body {
   padding: 22px;
   text-decoration: none;
   color: var(--text);
-  transition: all .2s;
+  transition: border-color .2s, transform .2s, box-shadow .2s;
 }
 
 .link-box:hover {
   border-color: var(--primary);
   transform: translateY(-3px);           /* 悬停轻微上浮 */
-  box-shadow: 0 6px 18px rgba(47, 111, 237, .12);
+  box-shadow: 0 6px 18px var(--primary-glow);
 }
 
 .link-box strong {
@@ -183,7 +204,7 @@ table {
 
 /* 表头 */
 thead th {
-  background-color: #eef3ff;
+  background-color: var(--primary-soft);
   color: var(--primary-dark);
   font-weight: 700;
   text-align: left;
@@ -199,7 +220,7 @@ tbody td {
 }
 
 tbody tr:hover {
-  background-color: #f8faff;   /* 鼠标指向某行时高亮 */
+  background-color: var(--primary-faint);   /* 鼠标指向某行时高亮 */
 }
 
 /* 表格下方的统计提示 */
@@ -209,9 +230,44 @@ tbody tr:hover {
   color: var(--text-light);
 }
 
+/* 名单页搜索框所在的一行 */
+.table-toolbar {
+  margin-bottom: 14px;
+}
+
+.search-input {
+  max-width: 320px;
+}
+
+/* 搜索结果为空时的提示单元格 */
+.empty-tip {
+  padding: 28px 14px;
+  text-align: center;
+  color: var(--text-light);
+}
+
 /* ---------- 8. 表单（信息收集页） ---------- */
 form {
   max-width: 520px;
+}
+
+/* 输入框：表单和搜索框共用同一套外观 */
+.input {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text);
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+
+.input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
 .form-item {
@@ -227,24 +283,7 @@ form {
 
 /* 红色星号，表示必填 */
 .required {
-  color: #e5484d;
-}
-
-.form-item input {
-  width: 100%;
-  padding: 11px 14px;
-  font-size: 15px;
-  font-family: inherit;
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  outline: none;
-  transition: border-color .2s;
-}
-
-.form-item input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(47, 111, 237, .12);
+  color: var(--danger);
 }
 
 .form-hint {
@@ -260,7 +299,7 @@ form {
   font-size: 15px;
   font-family: inherit;
   font-weight: 700;
-  color: #fff;
+  color: var(--on-primary);
   background-color: var(--primary);
   border: none;
   border-radius: 8px;
@@ -272,16 +311,23 @@ form {
   background-color: var(--primary-dark);
 }
 
-/* 提交后弹出的小提示条 */
+/* 提交后弹出的提示条：默认隐藏，由脚本控制显示 */
 .msg {
-  display: none;               /* 默认隐藏，由 JS 控制显示 */
+  display: none;
   margin-bottom: 20px;
   padding: 12px 16px;
   border-radius: 8px;
-  background-color: #eaf7ee;
-  border: 1px solid #b7e4c7;
-  color: #1b7a3d;
   font-size: 14px;
+  background-color: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: var(--success-text);
+}
+
+/* 校验失败（如学号重复）时的红色版本 */
+.msg-error {
+  background-color: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
 }
 
 /* ---------- 9. 页脚 ---------- */
@@ -292,4 +338,86 @@ form {
   font-size: 13px;
   color: var(--text-light);
   border-top: 1px solid var(--border);
+}
+
+/* ---------- 10. 无障碍辅助：只给屏幕阅读器看，视觉上隐藏 ---------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- 11. 打印样式 ---------- */
+/*  班级名单最常见的用法之一是打印出来贴墙。
+    这一节把导航、页脚、按钮、搜索框等交互元素全部隐藏，
+    并把表格改成适合黑白打印的样式。 */
+@media print {
+  body {
+    background-color: #fff;
+  }
+
+  /* 交互元素一律不打印 */
+  .site-header,
+  .site-footer,
+  .table-toolbar,
+  .link-grid,
+  .no-print {
+    display: none !important;
+  }
+
+  .container {
+    max-width: none;
+    padding: 0;
+  }
+
+  .card {
+    border: none;
+    padding: 0;
+    margin-bottom: 14px;
+    break-inside: avoid;   /* 尽量不让一张卡片被拆到两页 */
+  }
+
+  .card h2 {
+    padding-left: 0;
+    border-left: none;
+  }
+
+  /* 表格转为黑白线条，避免打印不出彩色底纹 */
+  table {
+    font-size: 12px;
+  }
+
+  .table-wrap {
+    overflow: visible;     /* 打印时不需要横向滚动 */
+  }
+
+  thead th {
+    background-color: #fff !important;
+    color: #000;
+    border-bottom: 1.5px solid #000;
+  }
+
+  tbody td {
+    border-bottom: 1px solid #999;
+  }
+
+  tbody tr:hover {
+    background-color: transparent !important;
+  }
+
+  a {
+    color: #000;
+    text-decoration: none;
+  }
+}
+
+/* 打印时的页边距 */
+@page {
+  margin: 12mm;
 }

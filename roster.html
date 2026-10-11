@@ -3,22 +3,33 @@
   ============================================================
   页面二：班级名单（roster.html）
   作用：用 table 表格展示全部同学信息。
-        结构：table > thead > tr > th（表头）
-              table > tbody > tr > td（数据行）
+        表格结构：table > caption（表格标题）
+                  table > thead > tr > th（表头）
+                  table > tbody > tr > td（数据行）
+  数据来源：不写死在 HTML 里，而是由 app.js 提供（见页面底部的脚本）。
+            这样加人只需要改 app.js 里的一个数组，
+            序号和人数统计都会自动算出来，不用手动同步。
   ============================================================
 -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <!-- 移动端适配：让页面在手机上按设备宽度渲染 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 页面描述：分享链接或搜索结果里会用到 -->
+  <meta name="description" content="班级同学名单，表格展示姓名、学号与联系方式，支持关键词搜索，可直接打印。">
+  <!-- 浏览器标签页图标 -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <title>班级名单 - 班级信息台</title>
+  <!-- 引入公共样式表 -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ========== 顶部导航栏 ========== -->
+  <!-- ========== 顶部导航栏（三个页面通用） ========== -->
   <header class="site-header">
     <div class="container header-inner">
+      <!-- 站点 Logo，点击回到首页 -->
       <a class="logo" href="index.html">🧩 计科 2026 班级信息台</a>
       <nav class="nav">
         <a href="index.html">首页</a>
@@ -34,110 +45,60 @@
 
     <section class="card">
       <h2>班级名单</h2>
-      <p>下表为计算机类专业 2026 级全体同学信息。数据为示例内容，请负责人替换为真实名单。</p>
+      <p>
+        下表为计算机类专业 2026 级全体同学信息。
+        <span class="no-print">名单保存在本机浏览器，可在「信息录入」页继续添加新同学。</span>
+      </p>
 
-      <!-- 表格外层加一层容器，窄屏时可横向滚动 -->
-      <div class="table-wrap">
+      <!-- 搜索框：输入姓名或学号即时筛选。打印时自动隐藏 -->
+      <div class="table-toolbar no-print">
+        <!-- 视觉上隐藏的标签，供屏幕阅读器说明这个输入框的用途 -->
+        <label class="sr-only" for="searchBox">按姓名或学号搜索同学</label>
+        <input
+          type="search"
+          id="searchBox"
+          class="input search-input"
+          placeholder="输入姓名或学号筛选…"
+          autocomplete="off">
+      </div>
+
+      <!-- 表格外层加一层容器，窄屏时可横向滚动；tabindex 让键盘也能聚焦并滚动它 -->
+      <div class="table-wrap" role="region" aria-label="班级同学名单" tabindex="0">
         <table>
-          <!-- 表头 -->
+          <!-- 表格标题：视觉上隐藏，供屏幕阅读器朗读 -->
+          <caption class="sr-only">班级同学名单，包含序号、姓名、学号和联系方式四列</caption>
+
+          <!-- 表头：scope="col" 告诉屏幕阅读器这是列标题 -->
           <thead>
             <tr>
-              <th>序号</th>
-              <th>姓名</th>
-              <th>学号</th>
-              <th>联系方式</th>
+              <th scope="col">序号</th>
+              <th scope="col">姓名</th>
+              <th scope="col">学号</th>
+              <th scope="col">联系方式</th>
             </tr>
           </thead>
 
-          <!-- 表格数据体：每一行 tr 代表一位同学，每个 td 是一个单元格 -->
-          <tbody>
-            <tr>
-              <td>1</td>
-              <td>张三</td>
-              <td>2026110101</td>
-              <td>138-0000-0001</td>
-            </tr>
-            <tr>
-              <td>2</td>
-              <td>王雨桐</td>
-              <td>2026110102</td>
-              <td>138-0000-0002</td>
-            </tr>
-            <tr>
-              <td>3</td>
-              <td>陈嘉禾</td>
-              <td>2026110103</td>
-              <td>138-0000-0003</td>
-            </tr>
-            <tr>
-              <td>4</td>
-              <td>张思远</td>
-              <td>2026110104</td>
-              <td>138-0000-0004</td>
-            </tr>
-            <tr>
-              <td>5</td>
-              <td>刘星宇</td>
-              <td>2026110105</td>
-              <td>138-0000-0005</td>
-            </tr>
-            <tr>
-              <td>6</td>
-              <td>赵梦琪</td>
-              <td>2026110106</td>
-              <td>138-0000-0006</td>
-            </tr>
-            <tr>
-              <td>7</td>
-              <td>孙浩然</td>
-              <td>2026110107</td>
-              <td>138-0000-0007</td>
-            </tr>
-            <tr>
-              <td>8</td>
-              <td>周静怡</td>
-              <td>2026110108</td>
-              <td>138-0000-0008</td>
-            </tr>
-            <tr>
-              <td>9</td>
-              <td>吴子墨</td>
-              <td>2026110109</td>
-              <td>138-0000-0009</td>
-            </tr>
-            <tr>
-              <td>10</td>
-              <td>郑一鸣</td>
-              <td>2026110110</td>
-              <td>138-0000-0010</td>
-            </tr>
-            <tr>
-              <td>11</td>
-              <td>黄书瑶</td>
-              <td>2026110111</td>
-              <td>138-0000-0011</td>
-            </tr>
-            <tr>
-              <td>12</td>
-              <td>徐子涵</td>
-              <td>2026110112</td>
-              <td>138-0000-0012</td>
-            </tr>
+          <!--
+            表格数据体：内容由页面底部的脚本根据 app.js 里的数据自动生成。
+            （每一行 tr 代表一位同学，每个 td 是一个单元格）
+          -->
+          <tbody id="rosterBody">
           </tbody>
         </table>
       </div>
 
-      <!-- 表格下方的统计说明 -->
-      <p class="table-tip">共 12 名同学 · 数据更新于 2026-10-08</p>
+      <!-- 表格下方的统计说明，人数由脚本写入 -->
+      <p class="table-tip" id="rosterCount">正在加载名单…</p>
     </section>
 
-    <!-- 底部回到首页的便捷入口 -->
-    <section class="card">
+    <!-- 底部回到首页的便捷入口（打印时不显示） -->
+    <section class="card no-print">
       <h2>相关操作</h2>
       <div class="link-grid">
+        <!-- 点击整块卡片即可跳转，提升可点击面积 -->
         <a class="link-box" href="form.html">
           <strong>✍️ 去录入新同学 →</strong>
-          <span>填写姓名和学号，提交信息</span>
+          <span>填写姓名和学号，提交后立刻出现在本页</span>
         </a>
         <a class="link-box" href="index.html">
           <strong>🏠 返回首页 →</strong>
@@ -149,9 +110,84 @@
   </main>
 
   <!-- ========== 页脚 ========== -->
-  <footer class="site-footer">
+  <footer class="site-footer no-print">
     <p>班级信息静态网页系统 &copy; 2026 · 计算机类专业 2026 级</p>
   </footer>
+
+  <!-- 数据层：提供同学名单的读取与保存 -->
+  <script src="app.js"></script>
+  <script>
+    /*
+      名单页脚本：读取名单 → 生成表格 → 支持关键词筛选
+
+      两个要点：
+        1. 单元格内容用 textContent 写入，而不是 innerHTML。
+           因为名单来自用户输入，用 innerHTML 拼接会有被当成 HTML 执行的风险（XSS）。
+        2. 序号取「该同学在完整名单中的位置」，而不是筛选结果里的序号。
+           这样搜索之后序号依然对应真实排名，不会重新从 1 开始。
+    */
+    (function () {
+      var tbody = document.getElementById('rosterBody');
+      var countEl = document.getElementById('rosterCount');
+      var searchBox = document.getElementById('searchBox');
+      var all = ClassData.load();   // 完整名单，只读一次
+
+      function render(keyword) {
+        var kw = (keyword || '').trim();
+        var shown = 0;
+
+        tbody.innerHTML = '';       // 清空旧内容，重新生成
+
+        all.forEach(function (student, index) {
+          if (!ClassData.match(student, kw)) return;
+          shown++;
+
+          var tr = document.createElement('tr');
+
+          // 一行四个单元格：序号 / 姓名 / 学号 / 联系方式
+          var cells = [
+            String(index + 1),
+            student.name,
+            student.sid,
+            student.contact || '—'      // 没填联系方式时显示破折号，避免出现空格子
+          ];
+
+          cells.forEach(function (text) {
+            var td = document.createElement('td');
+            td.textContent = text;
+            tr.appendChild(td);
+          });
+
+          tbody.appendChild(tr);
+        });
+
+        // 一条都没匹配上时给出提示，避免出现空表格让人以为页面坏了
+        if (shown === 0) {
+          var tr = document.createElement('tr');
+          var td = document.createElement('td');
+          td.colSpan = 4;
+          td.className = 'empty-tip';
+          td.textContent = all.length === 0
+            ? '名单还没有数据，请到「信息录入」页添加第一位同学。'
+            : '没有匹配的同学，换个关键词试试。';
+          tr.appendChild(td);
+          tbody.appendChild(tr);
+        }
+
+        // 底部统计文字
+        countEl.textContent = kw
+          ? '筛选出 ' + shown + ' 名同学（共 ' + all.length + ' 名）'
+          : '共 ' + all.length + ' 名同学 · 数据保存在本机浏览器';
+      }
+
+      // 输入即筛选（不需要按回车）
+      searchBox.addEventListener('input', function () {
+        render(this.value);
+      });
+
+      render('');   // 首次渲染完整名单
+    })();
+  </script>
 
 </body>
 </html>

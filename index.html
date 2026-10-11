@@ -10,6 +10,10 @@
   <meta charset="UTF-8">
   <!-- 移动端适配：让页面在手机上按设备宽度渲染 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 页面描述：分享链接或搜索结果里会用到 -->
+  <meta name="description" content="面向班级负责人的轻量班级信息台：在线查看名单、录入同学信息，纯静态无需服务器。">
+  <!-- 浏览器标签页图标 -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <title>首页 - 班级信息台</title>
   <!-- 引入公共样式表 -->
   <link rel="stylesheet" href="style.css">
@@ -49,8 +53,8 @@
       <p>系统包含三个页面：</p>
       <p>
         ① <strong>首页</strong>——介绍项目与班级，提供功能入口；<br>
-        ② <strong>班级名单</strong>——用表格展示全班同学的姓名、学号与联系方式；<br>
-        ③ <strong>信息录入</strong>——填写姓名和学号并提交。
+        ② <strong>班级名单</strong>——用表格展示全班同学的姓名、学号与联系方式，支持搜索；<br>
+        ③ <strong>信息录入</strong>——填写姓名和学号并提交，数据会保存到本机浏览器。
       </p>
     </section>
 
@@ -59,7 +63,7 @@
       <h2>班级简介</h2>
       <p>
         我们是<strong>某高校 计算机类专业 2026 级</strong>的学生。
-        班级现有同学 12 人，日常事务包括名单统计、信息收集、通知传达与活动组织。
+        班级现有同学 <span id="stuCount">12</span> 人，日常事务包括名单统计、信息收集、通知传达与活动组织。
       </p>
       <p>
         班级信息台的目标很朴素：把「查名单」和「收信息」这两件高频小事，
@@ -89,6 +93,16 @@
   <footer class="site-footer">
     <p>班级信息静态网页系统 &copy; 2026 · 计算机类专业 2026 级</p>
   </footer>
+
+  <!-- 数据层：首页只用到它来取当前人数 -->
+  <script src="app.js"></script>
+  <script>
+    /*
+      首页只做一件事：把班级简介里的「现有同学 N 人」显示成实际人数。
+      这样在录入页加了同学之后，首页的人数不会对不上。
+    */
+    document.getElementById('stuCount').textContent = ClassData.load().length;
+  </script>
 
 </body>
 </html>
