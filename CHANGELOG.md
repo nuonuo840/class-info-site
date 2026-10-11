@@ -5,7 +5,7 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
+## [0.3.0] - 2026-10-11
 
 ### 新增
 
@@ -62,11 +62,7 @@
 - 名单页与录入页的导航链接自动携带当前班级，不会跳到别的班
 - `README.md` 按新架构重写
 
-### 移除
-
-- `v0.2.1` 的 Release 与标签已删除（改动本身仍在代码中，见下一节）
-
-## 0.2.1 - 2026-10-11（未发布 Release）
+## [0.2.1] - 2026-10-11
 
 ### 修复
 
@@ -132,6 +128,7 @@
   去除可定位到具体院校的识别信息
 - 名单中的真实姓名替换为占位姓名「张三」
 
-[未发布]: https://github.com/nuonuo840/class-info-site/compare/v0.2.0...HEAD
+[0.3.0]: https://github.com/nuonuo840/class-info-site/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/nuonuo840/class-info-site/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/nuonuo840/class-info-site/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nuonuo840/class-info-site/releases/tag/v0.1.0

@@ -510,9 +510,7 @@ form.html?c=se-2026-1
 
 ## 版本
 
-最新发布版本 **v0.2.0**（[Releases](https://github.com/nuonuo840/class-info-site/releases)）。
-
-> 「多班级平台」改造目前只在本机，尚未发布，改动记录见 CHANGELOG 的「未发布」一节。
+最新发布版本 **v0.3.0**（[Releases](https://github.com/nuonuo840/class-info-site/releases)）。
 
 - 各版本改了什么：见 [CHANGELOG.md](./CHANGELOG.md)
 
