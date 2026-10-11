@@ -970,7 +970,112 @@ tr.row-editing {
   }
 }
 
-/* ---------- 16. 打印样式 ---------- */
+/* ---------- 16. 字段管理面板与编辑工具条（名单页） ---------- */
+/*  16.1 字段面板：和导入面板同一套外观，点工具条上的「字段」才展开。
+    每个班可以加几栏自己的信息（宿舍号、QQ…），改完立刻反映到表格里。 */
+
+.field-panel {
+  padding: 16px;
+  margin-bottom: 14px;
+  background-color: var(--primary-faint);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius);
+}
+
+/* 带 hidden 属性时必须真的不显示（上面的样式会盖掉浏览器默认表现） */
+.field-panel[hidden] {
+  display: none;
+}
+
+.field-panel .panel-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.field-list {
+  margin: 12px 0 4px;
+}
+
+/* 一行一个字段：左边输入框改名字，右边「删除」 */
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.field-row:last-child {
+  border-bottom: none;
+}
+
+.field-empty {
+  margin: 6px 0;
+  font-size: 14px;
+  color: var(--text-light);
+}
+
+/* 底部「加一栏」那一行 */
+.field-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+
+/* 16.2 编辑工具条：只要有一行在编辑就出现，提供「保存全部 / 全部取消」。
+    批量修改十几位同学时，不用一行行点「保存」。 */
+
+.edit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  background-color: var(--primary-soft);
+  border: 1px solid var(--primary-border);
+  border-radius: 8px;
+}
+
+.edit-bar[hidden] {
+  display: none;
+}
+
+.edit-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.edit-hint {
+  font-size: 13px;
+  color: var(--text-light);
+}
+
+/* 16.3 自定义字段列：表头别被挤断字（和性别列一个思路，宽度交给内容） */
+th[data-extra-head] {
+  white-space: nowrap;
+}
+
+/* 16.4 录入页的自定义字段：跟普通表单项一样，只多一条虚线把固定字段和附加栏分开 */
+#extraFields .form-item {
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+@media (max-width: 560px) {
+  /* 手机上字段名输入框占满一行，「删除」按钮自然跟到下一行 */
+  .field-row .input-mini {
+    flex: 1 1 140px;
+  }
+}
+
+/* ---------- 17. 打印样式 ---------- */
 /*  班级名单最常见的用法之一是打印出来贴墙。
     这一节把导航、页脚、按钮、搜索框等交互元素全部隐藏，
     并把表格改成适合黑白打印的样式。 */

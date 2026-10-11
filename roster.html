@@ -15,19 +15,24 @@
   本版新增的「管理」能力（每行最左边有一列复选框）：
     · 删除 —— 点某行的「删除」，确认后把这位同学从本班移除
     · 批量修改 —— 选中多位同学后点「批量修改信息」，这些行会同时变成输入框，
-                  每行各自保存，改完点自己那行的「保存」即可
+                  改完点自己那行的「保存」，或者点上方编辑条上的「保存全部」一次存完；
+                  在输入框里按 Ctrl+Enter 也能保存。留空的栏（比如没填联系方式）照样能存
     · 移动到别的班 —— 选中多位同学，在上方选好目标班级，点「移动过去」一次性转班
     · 批量删除 —— 选中多位同学后一次删掉
     · 上移 / 下移 —— 每行操作列里，用来调整同学在名单里的顺序
     · 按学号排序 —— 工具条上一键把整份名单按学号从小到大重排（可撤销）
+    · 字段 —— 给这个班加几栏自己的信息（宿舍号、QQ、备注…），
+              加完会出现在表格里，录入页也能填、导出也带上。每个班互不影响
     · 导入 —— 从 CSV 文件、或从 Excel 复制粘贴的内容批量导入同学：
-              先「识别」出一张预览表，看清楚会增加几位、哪几位会覆盖 / 跳过，再确认导入
-    · 导出 CSV —— 把当前显示的名单导出成表格文件，可直接用 Excel 打开
+              先「识别」出一张预览表，看清楚会增加几位、哪几位会覆盖 / 跳过，再确认导入；
+              表里多出来的列会自动变成这个班的字段
+    · 导出 CSV —— 把当前显示的名单导出成表格文件（含自定义字段），可直接用 Excel 打开
     · 撤销 —— 删除 / 移动 / 修改 / 排序 / 导入之后，顶部会出现「撤销」按钮，可退回上一步
               （只在本页本次打开期间有效，刷新页面就清空）
 
-  表格共七列：勾选、序号、姓名、性别、学号、联系方式、操作。
-  性别是选填的，没填的显示成「—」。
+  基本列共七列：勾选、序号、姓名、性别、学号、联系方式、操作；
+  如果这个班加了自定义字段，「联系方式」和「操作」之间会多出对应的列。
+  性别和联系方式都是**选填**的，没填的显示成「—」。
 
   另一个标签页改了数据时，本页会自动重新加载（见脚本里的 storage 监听）；
   如果本页正在编辑，则只弹提示，不打断你手上的活。
@@ -164,20 +169,52 @@
       -->
       <div class="table-toolbar no-print">
         <!-- 视觉上隐藏的标签，供屏幕阅读器说明这个输入框的用途 -->
-        <label class="sr-only" for="searchBox">按姓名、性别、学号或手机号搜索同学</label>
+        <label class="sr-only" for="searchBox">按姓名、性别、学号、联系方式或自定义字段搜索同学</label>
         <input
           type="search"
           id="searchBox"
           class="input search-input"
-          placeholder="输入姓名、性别、学号或手机号筛选…"
+          placeholder="输入姓名、性别、学号或联系方式筛选…"
           autocomplete="off">
 
         <div class="toolbar-actions">
           <button type="button" class="btn-mini" id="sortBtn" title="按学号从小到大重排名单（可撤销）">按学号排序</button>
+          <button type="button" class="btn-mini" id="fieldsBtn" title="给这个班加几栏自己的信息，比如宿舍号、QQ">字段</button>
           <button type="button" class="btn-mini" id="importBtn" title="从 CSV 文件或 Excel 粘贴的内容批量导入同学">导入</button>
           <button type="button" class="btn-mini" id="exportCsv" title="把当前显示的名单导出成 CSV 文件">导出 CSV</button>
           <button type="button" class="btn-mini" id="reloadBtn" title="重新读取本机保存的数据">重新加载</button>
         </div>
+      </div>
+
+      <!--
+        字段管理面板：点工具条上的「字段」才出现。打印时隐藏。
+        每个班可以有自己的附加栏（宿舍号、QQ、家长电话…），互不影响。
+      -->
+      <div class="field-panel no-print" id="fieldsPanel" hidden>
+        <p class="panel-title">这个班的附加字段</p>
+
+        <p class="form-hint">
+          四位基本信息（姓名 / 性别 / 学号 / 联系方式）是固定的，下面可以再加几栏本班自己的信息。
+          加好之后，这一栏会出现在名单表格里，也能在「信息录入」页填、跟着导出到 CSV。
+          从 Excel 导入时，表里多出来的列也会自动加成字段，不用先来这里手动建。
+        </p>
+
+        <!-- 已有字段：改名字 + 删除。改名不会丢同学填过的内容 -->
+        <div id="fieldList" class="field-list"></div>
+
+        <p class="field-add-row">
+          <label class="sr-only" for="newFieldLabel">新字段的名字</label>
+          <input
+            type="text"
+            id="newFieldLabel"
+            class="input input-mini"
+            placeholder="新字段名，例如：宿舍号"
+            autocomplete="off">
+          <button type="button" class="btn-mini btn-save" id="addFieldBtn">加一栏</button>
+          <button type="button" class="btn-mini" id="fieldsClose">关闭</button>
+        </p>
+
+        <p class="form-hint" id="fieldsHint"></p>
       </div>
 
       <!--
@@ -191,8 +228,14 @@
         <p class="form-hint">
           两种给数据的方式，用哪种都行：<strong>选一个 CSV 文件</strong>，
           或者<strong>直接从 Excel 里复制表格、粘贴到下面的框里</strong>。
-          第一行写成「姓名 / 性别 / 学号 / 手机号」这样的表头最好；
-          没有表头也能认，按「姓名、性别、学号、手机号」的位置对应。
+        </p>
+        <p class="form-hint">
+          第一行写成「姓名 / 性别 / 学号 / 联系方式」这样的表头最好；
+          没有表头也能认，按「姓名、性别、学号、联系方式」的位置对应。
+          其中<strong>只有姓名和学号是必须的</strong> —— 性别、联系方式留空都可以，
+          联系方式填座机、邮箱、QQ 也不会被拦下。
+          表里如果有别的列（宿舍号、备注…），会<strong>自动加成本班的字段</strong>，
+          不会丢掉。
         </p>
 
         <div class="import-file-row">
@@ -221,15 +264,16 @@
 
           <div class="table-wrap">
             <table class="import-table">
-              <caption class="sr-only">导入预览，逐行显示识别到的姓名、性别、学号、手机号与处理结果</caption>
+              <caption class="sr-only">导入预览，逐行显示识别到的姓名、性别、学号、联系方式与处理结果</caption>
               <thead>
-                <tr>
+                <tr id="importHeadRow">
                   <th scope="col">行</th>
                   <th scope="col">姓名</th>
                   <th scope="col">性别</th>
                   <th scope="col">学号</th>
-                  <th scope="col">手机号</th>
-                  <th scope="col">判定</th>
+                  <th scope="col">联系方式</th>
+                  <!-- 表里多出来的列会动态插在「判定」前面（由脚本生成） -->
+                  <th scope="col" id="importStateTh">判定</th>
                 </tr>
               </thead>
               <tbody id="importPreviewBody"></tbody>
@@ -279,11 +323,24 @@
         </div>
       </div>
 
+      <!--
+        编辑工具条：只要有一行处于编辑状态就出现（批量修改之后尤其需要它）。
+        批量改十几个同学时，不必一行行点「保存」——
+        点这里的「保存全部」一次搞定，或者在输入框里按 Ctrl+Enter。
+        打印时隐藏。
+      -->
+      <div class="edit-bar no-print" id="editBar" hidden>
+        <span class="edit-text" id="editText"></span>
+        <button type="button" class="btn-mini btn-save" id="saveAllBtn" title="把所有改过但还没保存的行一次存掉">保存全部</button>
+        <button type="button" class="btn-mini btn-cancel" id="cancelAllBtn" title="放弃所有还没保存的修改">全部取消</button>
+        <span class="edit-hint">也可以按 Ctrl&nbsp;+&nbsp;Enter 保存</span>
+      </div>
+
       <!-- 表格外层加一层容器，窄屏时可横向滚动；tabindex 让键盘也能聚焦并滚动它 -->
       <div class="table-wrap" role="region" aria-label="班级同学名单" tabindex="0">
         <table>
           <!-- 表格标题：视觉上隐藏，供屏幕阅读器朗读 -->
-          <caption class="sr-only">班级同学名单，包含全选、序号、姓名、性别、学号、联系方式和操作七列</caption>
+          <caption class="sr-only" id="rosterCaption">班级同学名单，包含全选、序号、姓名、性别、学号、联系方式和操作七列</caption>
 
           <!-- 表头：scope="col" 告诉屏幕阅读器这是列标题 -->
           <thead>
@@ -304,7 +361,7 @@
                 操作列：放「编辑」「删除」按钮。加 no-print，打印名单时这一列自动隐藏
                 （见 style.css 的 @media print），纸上不会出现按钮。
               -->
-              <th scope="col" class="col-action no-print">操作</th>
+              <th scope="col" class="col-action no-print" id="actionTh">操作</th>
             </tr>
           </thead>
 
@@ -328,7 +385,7 @@
         <!-- 点击整块卡片即可跳转，提升可点击面积 -->
         <a class="link-box" href="form.html" id="linkForm">
           <strong>✍️ 给这个班录入新同学 →</strong>
-          <span>填写姓名、学号和手机号，提交后立刻出现在本页</span>
+          <span>填写姓名、学号和联系方式，提交后立刻出现在本页</span>
         </a>
         <a class="link-box" href="index.html">
           <strong>🏫 切换班级 →</strong>
@@ -354,7 +411,7 @@
            - 查不到（没带参数，或编号不存在）→ 就地显示「专业 → 班级」选择器，
              选完点「查看名单」直接进入，不再把人赶回首页
         2. 读取该班名单 → 生成表格
-        3. 支持关键词筛选（姓名 / 性别 / 学号 / 手机号）
+        3. 支持关键词筛选（姓名 / 性别 / 学号 / 联系方式，以及自定义字段）
         4. 支持就地修改（点「编辑」该行变输入框）、删除、以及多选后的批量操作
         5. 「按学号排序」一键重排整份名单；「导入」从 CSV 或 Excel 粘贴的内容批量灌数据
 
@@ -413,6 +470,29 @@
       var importResult = document.getElementById('importResult');
       var importSummary = document.getElementById('importSummary');
       var importPreviewBody = document.getElementById('importPreviewBody');
+      var importHeadRow = document.getElementById('importHeadRow');
+      var importStateTh = document.getElementById('importStateTh');
+
+      // 字段管理面板（每个班自己的附加栏）
+      var fieldsPanel = document.getElementById('fieldsPanel');
+      var fieldList = document.getElementById('fieldList');
+      var newFieldLabel = document.getElementById('newFieldLabel');
+      var fieldsHint = document.getElementById('fieldsHint');
+
+      // 编辑工具条：保存全部 / 全部取消
+      var editBar = document.getElementById('editBar');
+      var editText = document.getElementById('editText');
+
+      /*
+        本班当前的自定义字段，形如 [{ key:'f1', label:'宿舍号' }]。
+        在下面确定 classId 之后会读一次；在字段管理面板里改完也会重新读。
+        表格的表头、每一个单元格、导出的表头都以它为准。
+      */
+      var fields = [];
+
+      /* 表头里「操作」列的位置：额外的列都插在它前面 */
+      var actionTh = document.getElementById('actionTh');
+      var rosterCaption = document.getElementById('rosterCaption');
 
       /* ---------- 0. 公共：填充学校名 ---------- */
       var schoolEls = document.querySelectorAll('.school-name');
@@ -552,10 +632,13 @@
       var classId = cls.id;
       var className = ClassData.getClassName(cls);
       var all = ClassData.load(classId);   // 完整名单，后面每次修改后都会重新读一遍
+      fields = ClassData.listFields(classId);   // 这个班的自定义附加栏
 
       document.title = className + ' - 班级信息平台';
       classTitle.textContent = className;
       classSub.textContent = '班级名单 · 数据保存在本机浏览器，点表格右侧「编辑」可直接修改';
+
+      renderExtraHead();   // 把附加栏的表头插到「操作」前面（没有字段时什么都不做）
 
       document.getElementById('crumbMajor').textContent = cls.major;
       document.getElementById('crumbClass').textContent = cls.grade + ' 级 ' + cls.name;
@@ -597,7 +680,7 @@
 
       /*
         联系方式显示格式化：
-        数据层里手机号只存 11 位数字（如 13800000001），这里显示时加上连字符，
+        联系方式里像手机号的那部分，数据层只存 11 位数字（如 13800000001），这里显示时加上连字符，
         变成更好读的 138-0000-0001。不是 11 位数字的内容（比如座机、邮箱、空值）
         就原样显示；完全没填时显示破折号，避免出现空格子。
       */
@@ -617,10 +700,6 @@
       */
       function isValidSid(sid) {
         return ClassData.checkSid(sid).ok;
-      }
-
-      function isValidContact(contact) {
-        return /^1[3-9]\d{9}$/.test(contact); // 手机号：1 开头、第 2 位 3~9、共 11 位
       }
 
       /*
@@ -775,58 +854,112 @@
       }
 
       /*
-        保存某一行的修改。
-        tr 是这一行的 <tr>，oldSid 是这位同学「改之前」的学号。
+        读一行的输入框内容并校验，**不改任何数据**。
+
+        返回 { ok: true, student: { name, sid, gender, contact, extra } }
+           或 { ok: false, gone: true }                  —— 这一行已经不在编辑态了
+           或 { ok: false, message: '…', focusEl: 输入框 } —— 没填好
+
+        校验尺度：只有姓名和学号是必须的。
+        性别、联系方式、以及所有自定义字段都是**选填** ——
+        留空完全允许（正是「批量修改时遇到空白也能保存」要的效果）。
       */
-      function saveEdit(tr, oldSid) {
+      function readRowInputs(tr, oldSid) {
         var nameInput = tr.querySelector('.cell-input[data-field="name"]');
         var genderInput = tr.querySelector('.cell-input[data-field="gender"]');
         var sidInput = tr.querySelector('.cell-input[data-field="sid"]');
         var contactInput = tr.querySelector('.cell-input[data-field="contact"]');
 
-        // 已经不在编辑状态（比如连点两次保存）就直接返回
-        if (!nameInput || !sidInput || !contactInput) return;
+        // 已经不在编辑状态（比如连点两次保存）就当没事发生
+        if (!nameInput || !sidInput || !contactInput) return { ok: false, gone: true };
 
         var name = nameInput.value.trim();
-        var gender = genderInput ? genderInput.value : '';   // 性别是选填的
+        var gender = genderInput ? genderInput.value : '';   // 选填
         var sid = sidInput.value.trim();
-        var contact = contactInput.value.trim();
+        var contact = contactInput.value.trim();             // 选填，且不限格式
+
+        if (!name) {
+          return { ok: false, message: '姓名不能为空。', focusEl: nameInput };
+        }
+        if (!isValidSid(sid)) {
+          return {
+            ok: false,
+            message: '学号应为' + ClassData.sidHint() + '，例如 ' + ClassData.sidExample() + '。',
+            focusEl: sidInput
+          };
+        }
+
+        // 自定义字段：每栏一个输入框，留空就是留空
+        var extra = {};
+        fields.forEach(function (field) {
+          var el = tr.querySelector('.cell-input[data-field="x:' + field.key + '"]');
+          if (el) extra[field.key] = el.value.trim();
+        });
+
+        return {
+          ok: true,
+          student: {
+            name: name,
+            sid: sid,
+            gender: gender,
+            contact: contact,
+            extra: extra,
+            // 这一页是完整编辑器：把所有附加栏都读出来了，
+            // 所以整份替换 —— 把某一栏清空是能生效的
+            extraMode: 'replace'
+          }
+        };
+      }
+
+      /* 保存失败时给用户看的原因 */
+      function describeSaveFailure(reason, sid) {
+        var reasons = {
+          notfound: '没找到学号 ' + sid + ' 对应的同学，名单可能已在别处被改动，请刷新页面重试。',
+          duplicate: '学号 ' + sid + ' 已被本班另一位同学占用，请换一个学号。',
+          storage: '保存失败，请检查浏览器是否禁用了本地存储。'
+        };
+        return reasons[reason] || '保存失败。';
+      }
+
+      /* 找出当前所有处于编辑态的行（按屏幕顺序） */
+      function collectEditingRows() {
+        var rows = [];
+        var trs = tbody.querySelectorAll('tr');
+
+        for (var i = 0; i < trs.length; i++) {
+          var el = trs[i].querySelector('.cell-input[data-field="sid"]');
+          if (el) rows.push({ tr: trs[i], sid: el.getAttribute('data-sid') });
+        }
+        return rows;
+      }
+
+      /*
+        保存某一行的修改。
+        tr 是这一行的 <tr>，oldSid 是这位同学「改之前」的学号。
+      */
+      function saveEdit(tr, oldSid) {
+        var read = readRowInputs(tr, oldSid);
 
         /*
           校验不通过时【不重新渲染】—— 否则用户刚敲进去的内容会被清空。
           只弹提示并让光标回到出问题的那个输入框。
         */
-        if (!name) {
-          showMsg('姓名不能为空。', 'error');
-          nameInput.focus();
-          return;
-        }
-        if (!isValidSid(sid)) {
-          showMsg('学号应为' + ClassData.sidHint() + '，例如 ' + ClassData.sidExample() + '。', 'error');
-          sidInput.focus();
-          return;
-        }
-        if (!isValidContact(contact)) {
-          showMsg('手机号应为 11 位纯数字，不要空格或横线，例如 13800000001。', 'error');
-          contactInput.focus();
+        if (!read.ok) {
+          if (read.gone) return;
+          showMsg(read.message, 'error');
+          if (read.focusEl) read.focusEl.focus();
           return;
         }
 
         // 先留一份快照，改成功之后才记成「可撤销的一步」
         var before = snapshot([classId]);
+        var student = read.student;
 
         // 注意：第一个参数是班级 id，第二个是这位同学「改之前」的学号
-        var result = ClassData.update(classId, oldSid, {
-          name: name, sid: sid, gender: gender, contact: contact
-        });
+        var result = ClassData.update(classId, oldSid, student);
 
         if (!result.ok) {
-          var reasons = {
-            notfound: '没找到学号 ' + oldSid + ' 对应的同学，名单可能已在别处被改动，请刷新页面重试。',
-            duplicate: '学号 ' + sid + ' 已被本班另一位同学占用，请换一个学号。',
-            storage: '保存失败，请检查浏览器是否禁用了本地存储。'
-          };
-          showMsg(reasons[result.reason] || '保存失败。', 'error');
+          showMsg(describeSaveFailure(result.reason, student.sid), 'error');
           return;
         }
 
@@ -836,10 +969,93 @@
         delete drafts[oldSid];
 
         all = ClassData.load(classId);
-        pushUndo('修改「' + name + '」的信息', before);
+        pushUndo('修改「' + student.name + '」的信息', before);
         setSearchEnabled(editingSids.length === 0);
         render(searchBox.value);
-        showMsg('已保存：' + name + '（学号 ' + sid + '，手机号 ' + formatContact(contact) + '）。', false);
+        showMsg('已保存：' + student.name + '（学号 ' + student.sid
+          + (student.contact ? '，联系方式 ' + formatContact(student.contact) : '')
+          + '）。', false);
+      }
+
+      /*
+        一次保存所有正在编辑的行 ——
+        批量改十几个同学时，不用一行行点「保存」。
+        「保存全部」按钮和 Ctrl+Enter 都走这里。
+
+        分两步走：先把每一行都校验一遍，全都合格了才写库。
+        这样不会出现「存了一半、剩下几行还停在编辑态」的尴尬局面。
+      */
+      function saveAllEdits() {
+        if (editingSids.length === 0) return;
+
+        var rows = collectEditingRows();
+        if (!rows.length) return;
+
+        // 第一步：整体校验
+        var ready = [];
+        var i;
+
+        for (i = 0; i < rows.length; i++) {
+          var read = readRowInputs(rows[i].tr, rows[i].sid);
+
+          if (read.ok) {
+            ready.push({ oldSid: rows[i].sid, student: read.student });
+            continue;
+          }
+          if (read.gone) continue;
+
+          showMsg('有一位同学还没填好，这一批先都不保存：' + read.message, 'error');
+          if (read.focusEl) read.focusEl.focus();
+          return;
+        }
+
+        if (!ready.length) return;
+
+        // 第二步：逐个写库，整批算作一步撤销
+        var before = snapshot([classId]);
+        var saved = 0;
+        var failure = '';
+
+        for (i = 0; i < ready.length; i++) {
+          var item = ready[i];
+          var result = ClassData.update(classId, item.oldSid, item.student);
+
+          if (!result.ok) {
+            if (!failure) failure = describeSaveFailure(result.reason, item.student.sid);
+            continue;
+          }
+
+          editingSids = editingSids.filter(function (s) { return s !== item.oldSid; });
+          delete drafts[item.oldSid];
+          saved++;
+        }
+
+        all = ClassData.load(classId);
+
+        if (saved > 0) pushUndo('一次保存 ' + saved + ' 位同学的信息', before);
+
+        setSearchEnabled(editingSids.length === 0);
+        render(searchBox.value);
+
+        if (failure) {
+          showMsg('已保存 ' + saved + ' 位，还有没存上的：' + failure, 'warn');
+        } else {
+          showMsg('已保存 ' + saved + ' 位同学的修改。', false);
+        }
+      }
+
+      /* 编辑工具条：有行在编辑时才出现，显示「保存全部 / 全部取消」 */
+      function renderEditBar() {
+        if (editingSids.length === 0) {
+          editBar.hidden = true;
+          editText.textContent = '';
+          return;
+        }
+
+        editBar.hidden = false;
+        editText.textContent = editingSids.length === 1
+          ? '正在修改 1 位同学'
+          : '正在修改 ' + editingSids.length + ' 位同学';
       }
 
       /* ---------- 撤销栈 ---------- */
@@ -1005,21 +1221,30 @@
         序号沿用完整名单里的位置，和页面上看到的一致。
         开头加一个 BOM，Excel 打开中文才不会乱码。
 
-        表头写的是「序号 / 姓名 / 性别 / 学号 / 联系方式」——
-        导入功能会按这几个字去认列，所以导出的文件改完能直接导回来，形成闭环。
+        表头是「序号 / 姓名 / 性别 / 学号 / 联系方式」，后面再接本班的自定义字段 ——
+        导入功能会按这几个字去认列、把不认识的列当成新字段，
+        所以导出的文件改完能直接导回来，多出来的列也不会丢，形成闭环。
       */
       function exportCsv() {
         var kw = searchBox.value.trim();
-        var rows = [['序号', '姓名', '性别', '学号', '联系方式']];
+
+        // 表头跟着本班的字段走：加了几栏就多几列
+        var header = ['序号', '姓名', '性别', '学号', '联系方式'];
+        fields.forEach(function (field) { header.push(field.label); });
+
+        var rows = [header];
         var i, j;
 
         for (i = 0; i < all.length; i++) {
           if (!ClassData.match(all[i], kw)) continue;
 
           var contact = formatContact(all[i].contact);
-          if (contact === '—') contact = '';   // 没填手机号就留空，别导出个破折号
+          if (contact === '—') contact = '';   // 没填联系方式就留空，别导出个破折号
 
-          rows.push([String(i + 1), all[i].name, all[i].gender || '', all[i].sid, contact]);
+          var line = [String(i + 1), all[i].name, all[i].gender || '', all[i].sid, contact];
+          fields.forEach(function (field) { line.push(extraValue(all[i], field.key)); });
+
+          rows.push(line);
         }
 
         if (rows.length === 1) {
@@ -1052,6 +1277,166 @@
           + (kw ? '注意：这是筛选后的结果，不是全班。' : ''), 'info');
       }
 
+      /* ---------- 字段管理面板 ---------- */
+
+      /*
+        面板结构：每个已有字段一行（改名用的输入框 + 「删除」），底部「加一栏」。
+
+        · 改名只动显示名、不动内部 key —— 所以同学们填过的内容一条都不会丢；
+          空名会自动退回原来的名字，不会把字段变成没名字。
+        · 删除会连同全班在这一栏里填过的内容一起清掉，所以先弹窗讲清楚。
+        · 上限（每班最多几栏）由数据层把关，这里只负责把原因说出来。
+      */
+      function openFieldsPanel() {
+        renderFieldsPanel();
+        fieldsPanel.hidden = false;
+        newFieldLabel.value = '';
+        newFieldLabel.focus();
+      }
+
+      function closeFieldsPanel() {
+        fieldsPanel.hidden = true;
+        fieldList.textContent = '';
+        newFieldLabel.value = '';
+        fieldsHint.textContent = '';
+      }
+
+      /* 画出面板里的字段列表 */
+      function renderFieldsPanel() {
+        fieldList.textContent = '';
+
+        if (fields.length === 0) {
+          var empty = document.createElement('p');
+          empty.className = 'field-empty';
+          empty.textContent = '这个班还没有附加字段。在下面输入一个名字就能加一栏，比如「宿舍号」。';
+          fieldList.appendChild(empty);
+        }
+
+        fields.forEach(function (field) {
+          var row = document.createElement('div');
+          row.className = 'field-row';
+
+          var input = document.createElement('input');
+          input.type = 'text';
+          input.className = 'input input-mini';
+          input.value = field.label;
+          input.maxLength = ClassData.FIELD_LABEL_MAX;
+          input.setAttribute('data-key', field.key);
+          input.setAttribute('aria-label', '字段名：' + field.label);
+
+          // 改完（失焦或按回车触发 change）才写一次存储，不要每敲一个字就写
+          input.addEventListener('change', function () {
+            renameFieldFrom(input, field.key, field.label);
+          });
+          input.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              input.blur();          // 失焦即触发 change
+            }
+          });
+
+          var del = document.createElement('button');
+          del.type = 'button';
+          del.className = 'btn-mini btn-del';
+          del.textContent = '删除';
+          del.setAttribute('aria-label', '删除字段 ' + field.label);
+          del.addEventListener('click', function () {
+            removeFieldFrom(field);
+          });
+
+          row.appendChild(input);
+          row.appendChild(del);
+          fieldList.appendChild(row);
+        });
+
+        fieldsHint.textContent = '「改名」只是换个显示的名字，同学们填过的内容不会丢；'
+          + '「删除」会连同这一栏的内容一起清掉。'
+          + '本班已用 ' + fields.length + ' / ' + ClassData.MAX_FIELDS + ' 栏。';
+      }
+
+      /* 面板里改字段名 */
+      function renameFieldFrom(input, key, oldLabel) {
+        var label = input.value.trim();
+
+        if (!label) {
+          input.value = oldLabel;   // 空名字没有意义，退回原来的
+          showMsg('字段名不能为空。', 'error');
+          return;
+        }
+
+        var result = ClassData.renameField(classId, key, label);
+
+        if (!result.ok) {
+          if (result.reason === 'duplicate') {
+            input.value = oldLabel;
+            showMsg('已经有一个叫「' + label + '」的字段了。', 'error');
+          } else {
+            showMsg('改名失败，请检查浏览器是否禁用了本地存储。', 'error');
+          }
+          return;
+        }
+
+        reloadFields();
+        showMsg('字段已改名为「' + result.field.label + '」。', false);
+      }
+
+      /* 面板里删字段 */
+      function removeFieldFrom(field) {
+        var yes = window.confirm(
+          '确定要删除「' + field.label + '」这一栏吗？\n\n'
+          + '全班同学在这一栏里填过的内容也会一起清掉，而且不能靠「撤销」找回。\n'
+          + '（如果只是想换个名字，直接改输入框里的字就行。）'
+        );
+        if (!yes) return;
+
+        var result = ClassData.removeField(classId, field.key);
+
+        if (!result.ok) {
+          showMsg('删除失败，请检查浏览器是否禁用了本地存储。', 'error');
+          return;
+        }
+
+        all = ClassData.load(classId);
+        reloadFields();
+        render(searchBox.value);
+        showMsg('已删除字段「' + field.label + '」。', false);
+      }
+
+      /* 面板里「加一栏」 */
+      function doAddField() {
+        var label = newFieldLabel.value.trim();
+
+        if (!label) {
+          showMsg('请先输入字段名，比如「宿舍号」。', 'warn');
+          newFieldLabel.focus();
+          return;
+        }
+
+        var result = ClassData.addField(classId, label);
+
+        if (!result.ok) {
+          var reasons = {
+            duplicate: '已经有一个叫「' + label + '」的字段了。',
+            limit: '一个班最多加 ' + ClassData.MAX_FIELDS + ' 栏，已经满了。',
+            empty: '字段名不能为空。'
+          };
+          showMsg(reasons[result.reason] || '添加失败，请检查浏览器是否禁用了本地存储。', 'error');
+          return;
+        }
+
+        newFieldLabel.value = '';
+        reloadFields();
+        render(searchBox.value);
+        showMsg('已加上字段「' + result.field.label + '」。', false);
+      }
+
+      /* 字段有变化后：重新读一遍，并重建表头与面板 */
+      function reloadFields() {
+        fields = ClassData.listFields(classId);
+        renderExtraHead();
+        renderFieldsPanel();
+      }
+
       /* ---------- 批量导入 ---------- */
 
       /* 解析失败时给用户看的原因（key 是数据层返回的 reason） */
@@ -1059,7 +1444,6 @@
         'no-name': '缺姓名',
         'no-sid': '缺学号',
         'sid-format': '学号格式不对',
-        'contact-format': '手机号格式不对',
         'dup-in-file': '表格内学号重复'
       };
 
@@ -1088,6 +1472,7 @@
         importResult.hidden = true;
         importPreviewBody.textContent = '';
         importSummary.textContent = '';
+        renderImportHead([]);          // 清掉上一次识别留下的额外列
         importPanel.hidden = false;
         importText.focus();
       }
@@ -1098,6 +1483,7 @@
         importResult.hidden = true;
         importPreviewBody.textContent = '';
         importSummary.textContent = '';
+        renderImportHead([]);          // 表头也恢复成基本那几列
         importFileName.textContent = '未选择文件';
         importText.value = '';
         try { importFile.value = ''; } catch (e) { /* 个别浏览器不让清空，忽略 */ }
@@ -1189,14 +1575,40 @@
         }
       }
 
+      /* 这个字段名是不是本班已经有了（用来告诉用户哪些列会变成新字段） */
+      function isExistingFieldLabel(label) {
+        var target = String(label).trim().toLowerCase();
+        return fields.some(function (f) { return f.label.trim().toLowerCase() === target; });
+      }
+
+      /* 预览表的表头：把表格里多出来的列按顺序插到「判定」前面 */
+      function renderImportHead(extraColumns) {
+        var stale = importHeadRow.querySelectorAll('[data-import-extra]');
+        var i;
+
+        for (i = 0; i < stale.length; i++) {
+          if (stale[i].parentNode) stale[i].parentNode.removeChild(stale[i]);
+        }
+
+        extraColumns.forEach(function (col) {
+          var th = document.createElement('th');
+          th.setAttribute('scope', 'col');
+          th.setAttribute('data-import-extra', String(col.index));
+          th.textContent = col.label;
+          importHeadRow.insertBefore(th, importStateTh);
+        });
+      }
+
       /* 画预览表：每一行都列出识别到的内容和判定结果 */
       function renderImportPreview(parsed) {
         var mode = currentImportMode();
+        var extraColumns = parsed.extraColumns || [];
         var newCount = 0;
         var dupCount = 0;
         var errCount = 0;
 
         importPreviewBody.textContent = '';
+        renderImportHead(extraColumns);
 
         parsed.rows.forEach(function (row) {
           var tr = document.createElement('tr');
@@ -1207,6 +1619,12 @@
           tr.appendChild(makeTextCell(row.gender || '—'));
           tr.appendChild(makeTextCell(row.sid || '—'));
           tr.appendChild(makeTextCell(row.contact ? formatContact(row.contact) : '—'));
+
+          // 表格里多出来的列，也逐行显示出来，让人确认没读错
+          extraColumns.forEach(function (col) {
+            var value = row.extras ? row.extras[col.index] : '';
+            tr.appendChild(makeTextCell(value || '—'));
+          });
 
           var stateTd = document.createElement('td');
 
@@ -1228,10 +1646,25 @@
           importPreviewBody.appendChild(tr);
         });
 
-        importSummary.textContent = '共识别 ' + parsed.total + ' 行 —— 新增 ' + newCount
-          + ' 位 · 与本班重复 ' + dupCount + ' 位 · 无法导入 ' + errCount + ' 行（'
-          + (parsed.header ? '已按表头对齐列' : '没写表头，按「姓名、性别、学号、手机号」的位置对应')
-          + '）';
+        var note = parsed.header
+          ? '已按表头对齐列'
+          : '没写表头，按「姓名、性别、学号、联系方式」的位置对应';
+
+        var summary = '共识别 ' + parsed.total + ' 行 —— 新增 ' + newCount
+          + ' 位 · 与本班重复 ' + dupCount + ' 位 · 无法导入 ' + errCount + ' 行（' + note + '）';
+
+        if (extraColumns.length) {
+          var newLabels = extraColumns.filter(function (col) {
+            return !isExistingFieldLabel(col.label);
+          }).map(function (col) { return col.label; });
+
+          summary += newLabels.length
+            ? '。表里还有 ' + extraColumns.length + ' 列其它信息，其中「' + newLabels.join('、')
+              + '」会一并加成本班的字段'
+            : '。表里还有 ' + extraColumns.length + ' 列其它信息，会写进本班已有的字段';
+        }
+
+        importSummary.textContent = summary;
       }
 
       /* 确认导入 */
@@ -1258,11 +1691,41 @@
           if (dupCount > 0) {
             var yes = window.confirm(
               '有 ' + dupCount + ' 位同学的学号在本班已经存在。\n\n'
-              + '选择「覆盖」会把这几位原有的姓名、性别、手机号全部换成表格里的内容。\n'
+              + '选择「覆盖」会把这几位原有的姓名、性别、联系方式换成表格里的内容'
+              + '（他们本来填过的其它栏如果这次表格里没有，会保留不动）。\n'
               + '确定继续吗？'
             );
             if (!yes) return;
           }
+        }
+
+        /*
+          先把表格里多出来的列变成这个班的字段，
+          再把每一行的值按「字段 key」挂到 row.extra 上 —— 之后 mergeRoster 才认得。
+          （超上限或建不出来的列会返回 null，这一列的内容就只能丢掉了，下面会说明。）
+        */
+        var extraColumns = parsedImport.extraColumns || [];
+        var slots = [];
+        var droppedColumns = 0;
+
+        if (extraColumns.length) {
+          var labels = extraColumns.map(function (col) { return col.label; });
+          slots = ClassData.ensureFields(classId, labels);
+          droppedColumns = slots.filter(function (f) { return !f; }).length;
+
+          parsedImport.rows.forEach(function (row) {
+            if (!row.ok) return;
+
+            var extra = {};
+            extraColumns.forEach(function (col, i) {
+              var field = slots[i];
+              if (!field) return;
+
+              var value = row.extras ? row.extras[col.index] : '';
+              if (value) extra[field.key] = value;
+            });
+            row.extra = extra;
+          });
         }
 
         var before = snapshot([classId]);
@@ -1275,10 +1738,19 @@
 
         all = ClassData.load(classId);
 
+        // 表头可能刚多出几列，重建一下
+        if (extraColumns.length) reloadFields();
+
         var text = '导入完成：新增 ' + result.added + ' 位';
         if (result.updated > 0) text += '，覆盖 ' + result.updated + ' 位';
         if (result.skipped > 0) text += '，因学号重复跳过 ' + result.skipped + ' 位';
         if (result.invalid > 0) text += '，格式不对丢掉 ' + result.invalid + ' 行';
+        if (extraColumns.length) {
+          text += '；表里的 ' + extraColumns.length + ' 列其它信息也一并存下了';
+        }
+        if (droppedColumns > 0) {
+          text += '（其中 ' + droppedColumns + ' 列因字段已加满没能导入）';
+        }
         text += '，本班现有 ' + all.length + ' 名同学。';
 
         if (result.added + result.updated > 0) {
@@ -1289,7 +1761,7 @@
         render(searchBox.value);
 
         // 有跳过或丢掉的，用橙色提示一下，免得用户以为全都进来了
-        showMsg(text, (result.skipped > 0 || result.invalid > 0) ? 'warn' : false);
+        showMsg(text, (result.skipped > 0 || result.invalid > 0 || droppedColumns > 0) ? 'warn' : false);
       }
 
       /* ---------- 跨标签页同步 ---------- */
@@ -1308,6 +1780,7 @@
         all = ClassData.load(classId);
         selectedSids = [];
         drafts = {};
+        reloadFields();      // 别的标签页可能刚加了字段
         render(searchBox.value);
 
         if (note) showMsg(note, 'info');
@@ -1542,6 +2015,55 @@
         showMsg('已删除 ' + n + ' 位同学，本班现剩 ' + all.length + ' 名同学。', false);
       }
 
+      /* ---------- 自定义字段：列数、取值、表头 ---------- */
+
+      /*
+        表格一共几列：勾选、序号、姓名、性别、学号、联系方式、操作 = 7 列，
+        再加上本班的每一个自定义字段一列。
+        （空表提示的 colSpan、表格标题的说明都要用它。）
+      */
+      function columnCount() {
+        return 7 + fields.length;
+      }
+
+      /* 取某位同学在某个自定义字段里的值；没填返回空字符串 */
+      function extraValue(student, key) {
+        var extra = student && student.extra;
+        if (!extra || typeof extra !== 'object') return '';
+
+        var value = extra[key];
+        return value == null ? '' : String(value);
+      }
+
+      /*
+        重建表头里的自定义字段列。
+
+        表头本身是静态 HTML（勾选 / 序号 / 姓名 / 性别 / 学号 / 联系方式 / 操作），
+        这里只负责把「操作」前面那一段按最新字段列表替换掉 ——
+        加字段、删字段、改名之后都重新调一次即可。
+      */
+      function renderExtraHead() {
+        var stale = document.querySelectorAll('[data-extra-head]');
+        var i;
+
+        for (i = 0; i < stale.length; i++) {
+          if (stale[i].parentNode) stale[i].parentNode.removeChild(stale[i]);
+        }
+
+        fields.forEach(function (field) {
+          var th = document.createElement('th');
+          th.setAttribute('scope', 'col');
+          th.setAttribute('data-extra-head', field.key);
+          th.textContent = field.label;
+          actionTh.parentNode.insertBefore(th, actionTh);   // 插在「操作」前面
+        });
+
+        var labels = fields.map(function (f) { return f.label; });
+        rosterCaption.textContent = '班级同学名单，包含全选、序号、姓名、性别、学号、联系方式'
+          + (labels.length ? '、' + labels.join('、') : '')
+          + '和操作共 ' + columnCount() + ' 列';
+      }
+
       /* ---------- 渲染整张表 ---------- */
 
       function render(keyword) {
@@ -1585,7 +2107,7 @@
 
           if (editing) {
             /* ===== 编辑状态：四个字段换掉，操作列换成「保存 / 取消」 =====
-               姓名 / 学号 / 手机号变成输入框，性别变成下拉框；
+               姓名 / 学号 / 联系方式变成输入框，性别变成下拉框，自定义字段各一个输入框；
                内容优先取草稿，没有草稿才用数据层里的原值。 */
 
             var nameTd = document.createElement('td');
@@ -1612,7 +2134,20 @@
             contactTd.appendChild(makeInput(
               student.sid, 'contact',
               draft.contact !== undefined ? draft.contact : student.contact,
-              '手机号', 11, 'numeric'));
+              '联系方式（选填）', 40));
+
+            // 本班自定义字段：每个字段一个小输入框，data-field 前缀 x:
+            var extraTds = fields.map(function (field) {
+              var value = extraValue(student, field.key);
+              var draftKey = 'x:' + field.key;
+
+              var cell = document.createElement('td');
+              cell.appendChild(makeInput(
+                student.sid, draftKey,
+                draft[draftKey] !== undefined ? draft[draftKey] : value,
+                field.label + '（选填）', ClassData.FIELD_VALUE_MAX));
+              return cell;
+            });
 
             var actionTd = document.createElement('td');
             actionTd.className = 'col-action no-print';
@@ -1627,11 +2162,13 @@
             tr.appendChild(genderTd);
             tr.appendChild(sidTd);
             tr.appendChild(contactTd);
+            extraTds.forEach(function (cell) { tr.appendChild(cell); });
             tr.appendChild(actionTd);
 
             // 键盘操作：回车 = 保存这一行，Esc = 取消这一行
+            // （Ctrl / ⌘ + Enter = 保存全部，由页面上统一的快捷键处理，见下方）
             tr.addEventListener('keydown', function (event) {
-              if (event.key === 'Enter') {
+              if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey) {
                 event.preventDefault();
                 saveEdit(tr, student.sid);
               } else if (event.key === 'Escape') {
@@ -1651,6 +2188,11 @@
 
             tr.appendChild(makeTextCell(student.sid));
             tr.appendChild(makeTextCell(formatContact(student.contact)));
+
+            // 自定义字段：只读展示，没填的显示破折号
+            fields.forEach(function (field) {
+              tr.appendChild(makeTextCell(extraValue(student, field.key) || '—'));
+            });
 
             var td = document.createElement('td');
             td.className = 'col-action no-print';
@@ -1692,7 +2234,7 @@
         if (shown === 0) {
           var emptyTr = document.createElement('tr');
           var emptyTd = document.createElement('td');
-          emptyTd.colSpan = 7;       // 一共七列，让提示文字横跨整行
+          emptyTd.colSpan = columnCount();   // 列数会随自定义字段变，不能写死
           emptyTd.className = 'empty-tip';
           emptyTd.textContent = all.length === 0
             ? '这个班还没有名单数据，请到「信息录入」页添加第一位同学。'
@@ -1707,6 +2249,7 @@
           : '本班共 ' + all.length + ' 名同学 · 数据保存在本机浏览器，可修改、删除、排序、导入导出，也可勾选后批量操作';
 
         renderBulkBar();   // 勾选状态跟着表格一起刷新
+        renderEditBar();   // 编辑条（保存全部）跟着编辑状态一起刷新
       }
 
       // 输入即筛选（不需要按回车）。
@@ -1760,6 +2303,49 @@
       document.getElementById('bulkClear').addEventListener('click', function () {
         clearSelection();
         syncRowChecks();
+      });
+
+      /* ---------- 编辑工具条：保存全部 / 全部取消 ---------- */
+
+      // 一次把所有正在编辑的行存掉（批量改十几个人时尤其省事）
+      document.getElementById('saveAllBtn').addEventListener('click', saveAllEdits);
+
+      // 放弃所有还没保存的修改
+      document.getElementById('cancelAllBtn').addEventListener('click', function () {
+        if (editingSids.length === 0) return;
+        cancelEdit();   // 不传参数 = 全部退出编辑态
+      });
+
+      /*
+        Ctrl + Enter（macOS 上是 ⌘ + Enter）：保存全部。
+        挂在 document 上而不是每一行 —— 这样光标在哪个格子里都管用，
+        甚至点到「保存全部」按钮上按也能生效。
+      */
+      document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey)) return;
+        if (editingSids.length === 0) return;
+
+        event.preventDefault();
+        saveAllEdits();
+      });
+
+      /* ---------- 字段管理面板 ---------- */
+
+      // 工具条上的「字段」：开着就关掉，关着就打开
+      document.getElementById('fieldsBtn').addEventListener('click', function () {
+        if (fieldsPanel.hidden) openFieldsPanel();
+        else closeFieldsPanel();
+      });
+
+      document.getElementById('fieldsClose').addEventListener('click', closeFieldsPanel);
+      document.getElementById('addFieldBtn').addEventListener('click', doAddField);
+
+      // 在输入框里按回车 = 点「加一栏」
+      newFieldLabel.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          doAddField();
+        }
       });
 
       // 撤销上一步（删除 / 移动 / 修改 / 排序）

@@ -2,7 +2,10 @@
 <!--
   ============================================================
   页面三：信息收集表单（form.html）
-  作用：录入同学信息 —— 填写姓名、学号、手机号，并指定这位同学属于哪个班级。
+  作用：录入同学信息 —— 填写姓名、学号、联系方式，并指定这位同学属于哪个班级。
+
+  必填的只有姓名和学号；性别、联系方式，以及班级自己加的附加栏（宿舍号、QQ…）
+  都是选填，联系方式还不限格式（手机号 / 座机 / 邮箱都收）。
 
   本页的「当前班级」有两个来源，页面上随时可以改：
     ① 网址参数 c，例如 form.html?c=cs-2026-1
@@ -25,7 +28,7 @@
   <meta charset="UTF-8">
   <!-- 移动端适配：让页面在手机上按设备宽度渲染 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="班级同学信息录入表单，选择专业与班级后填写姓名、学号、手机号并提交，数据保存在本机浏览器。">
+  <meta name="description" content="班级同学信息录入表单，选择专业与班级后填写姓名、学号、联系方式并提交，数据保存在本机浏览器。">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <title>信息录入 - 班级信息平台</title>
   <link rel="stylesheet" href="style.css">
@@ -166,27 +169,31 @@
           <p class="form-hint" id="stuIdHint"></p>
         </div>
 
-        <!-- 字段四：手机号（即名单页里的「联系方式」这一列） -->
+        <!-- 字段四：联系方式（即名单页里的「联系方式」这一列） -->
         <div class="form-item">
-          <label for="contact">手机号 <span class="required">*</span></label>
+          <label for="contact">联系方式</label>
           <!--
-            type="tel"：手机上点开自动弹数字键盘
-            pattern 做正则校验：1 开头 + 第 2 位 3~9 + 后面 9 位数字，共 11 位
-            inputmode / maxlength：辅助手机输入，限制最多 11 个字符
+            选填，而且不限格式 —— 手机号、座机、邮箱、QQ/微信号都行，留空也可以。
+            写得像 11 位手机号（13800000001 或 138-0000-0001）时，
+            数据层会规整成纯数字存起来，名单页显示成 138-0000-0001 更好读。
           -->
           <input
-            type="tel"
+            type="text"
             id="contact"
             name="contact"
             class="input"
-            placeholder="请输入 11 位手机号，例如：13800000013"
-            pattern="1[3-9]\d{9}"
-            maxlength="11"
-            inputmode="numeric"
-            title="手机号应为 11 位数字，以 1 开头"
-            required>
-          <p class="form-hint">11 位数字，会显示在名单页的「联系方式」列</p>
+            placeholder="选填，手机号 / 座机 / 邮箱都行，例如：13800000013"
+            maxlength="40"
+            autocomplete="off">
+          <p class="form-hint">选填，会显示在名单页的「联系方式」列</p>
         </div>
+
+        <!--
+          自定义字段：本班在名单页的「字段」里加过几栏，这里就出现几个输入框。
+          全部选填。由页面底部脚本按当前班级动态生成 ——
+          换班级时这几栏会跟着换成那个班的字段。
+        -->
+        <div id="extraFields"></div>
 
         <!-- 提交按钮 -->
         <button type="submit" class="btn-submit">提 交</button>
@@ -208,12 +215,22 @@
       </p>
       <p>
         <strong>如果学号在本班已经存在</strong>，页面会弹窗问你要不要用这次填写的信息覆盖原有记录 ——
-        之前漏填手机号的同学，用同样的学号重填一次就能补上。
+        之前漏填联系方式的同学，用同样的学号重填一次就能补上。
         （注意：学号查重只在<strong>本班范围</strong>内判断，不同班级可以有相同学号。）
       </p>
       <p>
-        姓名、学号、手机号三项必填，<strong>性别为选填</strong> ——
-        不填也没关系，名单页会显示成「—」，之后在名单页随时能补上。
+        只有<strong>姓名和学号是必填</strong>的。<strong>性别</strong>、<strong>联系方式</strong>
+        以及班级自己加的那几栏都是选填 —— 不填也没关系，名单页会显示成「—」，之后随时能补上。
+      </p>
+      <p>
+        <strong>联系方式不限格式</strong>：手机号、座机、邮箱、QQ / 微信号都可以，留空也行。
+        写得像 11 位手机号（<code>13800000001</code> 或 <code>138-0000-0001</code>）时，
+        名单页会显示成更好读的 <code>138-0000-0001</code>。
+      </p>
+      <p>
+        如果这一页出现了<strong>「宿舍号」「QQ」之类的额外一栏</strong>，那是这个班在
+        「班级名单」页用「<strong>字段</strong>」按钮自己加的。每个班的字段互相独立，
+        换班级时这几栏会跟着变。
       </p>
       <p>
         学号的位数要求由 <code>app.js</code> 顶部的「学号规则」统一决定
@@ -222,7 +239,8 @@
       </p>
       <p>
         如果一次要录几十位同学，不用一条条敲 —— 到「班级名单」页点「<strong>导入</strong>」，
-        可以把 Excel 里整理好的一份名单整批导进来。
+        可以把 Excel 里整理好的一份名单整批导进来；
+        表里多出来的列会<strong>自动变成这个班的字段</strong>。
       </p>
       <p>
         数据不会上传到任何服务器，所以换一台电脑、或换一个浏览器就看不到了。
@@ -287,6 +305,7 @@
       var navForm = document.getElementById('navForm');
       var linkRoster = document.getElementById('linkRoster');
       var infoForm = document.getElementById('infoForm');
+      var extraFieldsEl = document.getElementById('extraFields');
 
       /* ---------- 0. 公共小工具 ---------- */
 
@@ -409,6 +428,65 @@
         return classSelect.disabled ? '' : classSelect.value;
       }
 
+      /* ---------- 4.5 自定义字段的输入框 ---------- */
+
+      /*
+        按当前班级的「附加字段」生成对应的输入框。
+        每个班的字段是各管各的，所以换班级时这里要重新生成一遍。
+
+        全部选填 —— 没填就是空，提交时不会带上这个键。
+      */
+      function renderExtraFields() {
+        var classId = currentClassId();
+        var list = classId ? ClassData.listFields(classId) : [];
+
+        extraFieldsEl.textContent = '';
+
+        list.forEach(function (field) {
+          var item = document.createElement('div');
+          item.className = 'form-item';
+
+          var inputId = 'extra-' + field.key;
+
+          var label = document.createElement('label');
+          label.setAttribute('for', inputId);
+          label.textContent = field.label;
+
+          var input = document.createElement('input');
+          input.type = 'text';
+          input.id = inputId;
+          input.name = inputId;
+          input.className = 'input extra-input';
+          input.setAttribute('data-key', field.key);
+          input.setAttribute('data-label', field.label);
+          input.maxLength = ClassData.FIELD_VALUE_MAX;
+          input.autocomplete = 'off';
+
+          var hint = document.createElement('p');
+          hint.className = 'form-hint';
+          hint.textContent = '选填 · 在名单页用「字段」按钮增删这一栏';
+
+          item.appendChild(label);
+          item.appendChild(input);
+          item.appendChild(hint);
+          extraFieldsEl.appendChild(item);
+        });
+      }
+
+      /* 收集这几栏里填了的内容，返回 { 字段key: 值 } */
+      function collectExtra() {
+        var inputs = extraFieldsEl.querySelectorAll('.extra-input');
+        var extra = {};
+
+        for (var i = 0; i < inputs.length; i++) {
+          var key = inputs[i].getAttribute('data-key');
+          var value = inputs[i].value.trim();
+
+          if (key && value) extra[key] = value;
+        }
+        return extra;
+      }
+
       /* ---------- 5. 把「当前班级」同步到页面各处 ---------- */
       function syncContext() {
         var classId = currentClassId();
@@ -422,6 +500,7 @@
           navRoster.href = 'index.html';
           navForm.href = 'index.html';
           linkRoster.href = 'index.html';
+          extraFieldsEl.textContent = '';
           return;
         }
 
@@ -444,6 +523,9 @@
         navRoster.href = ClassData.buildUrl('roster.html', classId);
         navForm.href = ClassData.buildUrl('form.html', classId);
         linkRoster.href = ClassData.buildUrl('roster.html', classId);
+
+        // 这个班的附加字段（有的班加了「宿舍号」，有的班没有，所以每次都得重来）
+        renderExtraFields();
 
         // 地址栏跟上，方便刷新与分享
         syncUrl(classId);
@@ -521,19 +603,22 @@
         var name = document.getElementById('name').value.trim();
         var gender = document.getElementById('gender').value;   // 选填，可能是空字符串
         var stuId = document.getElementById('stuId').value.trim();
-        var contact = document.getElementById('contact').value.trim();
+        var contact = document.getElementById('contact').value.trim();   // 选填，且不限格式
+        var extra = collectExtra();                                     // 本班附加字段，选填
 
-        if (!name || !stuId || !contact) {
-          alert('请填写完整的姓名、学号和手机号');
+        // 只有姓名和学号是必须的 —— 联系方式、性别、附加字段都可以留空
+        if (!name || !stuId) {
+          alert('请填写姓名和学号。\n\n（性别、联系方式以及本班自己加的字段都是选填的，留空没关系。）');
           return;
         }
 
-        // 性别是选填的，规整成 '男' / '女' / ''（未填写）后再入库
+        // 性别规整成 '男' / '女' / ''（未填写）后再入库；联系方式与附加字段由数据层规整
         var student = {
           name: name,
           sid: stuId,
           gender: ClassData.normalizeGender(gender),
-          contact: contact
+          contact: contact,
+          extra: extra
         };
 
         // 往「当前班级」里加人
@@ -547,7 +632,7 @@
 
           var yes = window.confirm(
             '在本班（' + className + '）里，学号 ' + stuId + ' 已经存在（' + existName
-            + '，手机号：' + existContact + '）。\n\n'
+            + '，联系方式：' + existContact + '）。\n\n'
             + '要用这次填写的信息覆盖原来的记录吗？'
           );
 
@@ -555,7 +640,8 @@
             var updated = ClassData.update(classId, stuId, student);
 
             if (updated.ok) {
-              showMsg('已更新：' + name + '（学号 ' + stuId + '）的手机号为 ' + contact + '。');
+              showMsg('已更新：' + name + '（学号 ' + stuId + '）的联系方式为 '
+                + (contact ? contact : '空') + '。');
               infoForm.reset();
               syncContext();   // 人数可能没变，但顺手刷新一下说明
             } else {
@@ -576,7 +662,8 @@
 
         // 情况三：新增成功
         showMsg('已录入到「' + className + '」：' + name + '（学号 ' + stuId
-          + '，手机号 ' + contact + '），本班现有 ' + result.count + ' 名同学。');
+          + (contact ? '，联系方式 ' + contact : '')
+          + '），本班现有 ' + result.count + ' 名同学。');
         // 清空三个输入框，方便继续录入下一位（班级选择在表单之外，不受影响）
         infoForm.reset();
         syncContext();   // 刷新「该班已有 N 名同学」

@@ -21,7 +21,16 @@
             name    姓名
             sid     学号（本班内唯一）
             gender  性别 —— '男' / '女' / ''（未填写）
-            contact 手机号（只存 11 位数字，显示时才加连字符）
+            contact 联系方式 —— 自由填写（手机号 / 座机 / 邮箱都行，可留空）；
+                    长得像 11 位手机号时会存成纯数字，显示时才加连字符
+            extra   自定义字段的内容 —— { 字段key: 值 }，
+                    字段本身按班级定义，存在 classInfoSite.fields 里
+                    （比如 1 班加了「宿舍号」，1 班的同学就多这一格）
+
+     3. 自定义字段（每个班一份）
+        - 键名 classInfoSite.fields，形如 { 'cs-2026-1': [{ key:'f1', label:'宿舍号' }] }
+        - 4 个固定字段之外，每个班可以自己再加最多 8 栏；
+          从 Excel 导入时表里多出来的列会自动变成字段，不用手动建
 
    换一所学校要改的地方只有两处，都在本文件顶部：
      · SCHOOL_NAME 附近 —— 学校名（现在也能在首页「学校设置」里改）
@@ -123,6 +132,15 @@
   var CLASSES_KEY = 'classInfoSite.classes';       // 页面上新建的班级目录
   var SCHOOL_KEY = 'classInfoSite.schoolName';     // 用户在首页设置过的学校名
   var HIDDEN_KEY = 'classInfoSite.hiddenClasses';  // 被删掉的「预置班级」id 列表
+  var FIELDS_KEY = 'classInfoSite.fields';         // 各班自定义字段：{ 班级id: [{key,label}] }
+
+  /*
+    自定义字段的几条硬上限（都是为了页面别失控）。
+    每个班的字段互相独立：1 班可以加「宿舍号」，2 班可以加「QQ」，互不影响。
+  */
+  var MAX_FIELDS = 8;        // 一个班最多加几个自定义字段
+  var FIELD_LABEL_MAX = 12;  // 字段名最长几个字（表头要放得下）
+  var FIELD_VALUE_MAX = 60;  // 每个字段的内容最长几个字
 
   /*
     上一版（只支持单个班级时）用的存储键，仅用于一次性数据迁移。
@@ -163,7 +181,7 @@
         { name: '张三', sid: '2026110101', contact: '13800000001' }
       ],
 
-    contact 一栏写手机号，只写 11 位数字，名单页会自动显示成 138-0000-0001。
+    contact 一栏是联系方式（选填）：写 11 位手机号时名单页会自动显示成 138-0000-0001。
     注意：填在这里的内容会随代码一起发布，所有访问者都能看到 ——
          不要放真实的手机号等个人隐私信息。
   */
@@ -173,11 +191,30 @@
      二、工具函数
      ============================================================ */
 
-  /* 规整手机号：只保留数字。
-     用户在输入框里写成 138-0000-0001 或 138 0000 0001 都没关系，
-     存进来统一变成 13800000001，保证格式一致、方便比对。 */
+  /*
+    规整「联系方式」。
+
+    这一栏是**自由填写**的 —— 手机号、座机、邮箱、QQ/微信号、家长电话都可以，
+    留空也允许，一律不做格式判断（填什么都不算错）。
+
+    只有一种情况会做归一化：内容长得像 11 位手机号（允许带空格 / 横线 /
+    括号 / 加号，例如 138-0000-0001、138 0000 0001），就只保留数字存起来。
+    这样做的目的是让「显示成 138-0000-0001」和「搜索时忽略连字符」这两件事
+    仍然好用，同时又不限制用户填别的东西。
+
+    其它内容（0553-1234567、zhang@qq.com、QQ12345…）原样保留。
+  */
   function normalizeContact(contact) {
-    return String(contact == null ? '' : contact).replace(/\D/g, '');
+    var value = trim(contact);
+    if (!value) return '';
+
+    // 含字母等非电话字符 → 肯定不是手机号，原样留着
+    if (!/^[\d\s\-()+]*$/.test(value)) return value;
+
+    var digits = value.replace(/\D/g, '');
+    if (digits.length === 11 && /^1[3-9]\d{9}$/.test(digits)) return digits;
+
+    return value;
   }
 
   /* 去掉首尾空格；null / undefined 一律当空字符串处理 */
@@ -490,8 +527,9 @@
         localStorage.setItem(CLASSES_KEY, JSON.stringify(kept));
       }
 
-      // 班级都没了，它的名单也没有留着的意义
+      // 班级都没了，它的名单和自定义字段也没有留着的意义
       localStorage.removeItem(STUDENT_PREFIX + classId);
+      writeFields(classId, []);
 
       return { ok: true, name: getClassName(cls) };
     } catch (e) {
@@ -567,7 +605,8 @@
       name: student.name,
       sid: student.sid,
       gender: normalizeGender(student.gender),
-      contact: normalizeContact(student.contact)
+      contact: normalizeContact(student.contact),
+      extra: normalizeExtra(student.extra, listFields(classId))
     });
 
     if (!save(classId, list)) return { ok: false, reason: 'storage' };
@@ -629,13 +668,34 @@
     list[index].gender = normalizeGender(student.gender);
     list[index].contact = normalizeContact(student.contact);
 
+    /*
+      附加内容怎么处理，看调用方是谁：
+
+        · 传了 extraMode: 'replace' —— 整份替换（名单页的行内编辑用）。
+          名单页把每一栏都读出来、包括留空的，所以「把某一栏清空」能生效。
+        · 没传 extraMode —— 合并（录入页用）。
+          录入页只管姓名/学号/联系方式，没提到的附加栏保持原样，
+          不会因为「重填一次基本信息」就把同学们填过的宿舍号抹掉。
+        · 压根没传 extra —— 完全不动。
+    */
+    if (student.extra !== undefined) {
+      var incomingExtra = normalizeExtra(student.extra, listFields(classId));
+
+      if (student.extraMode === 'replace') {
+        list[index].extra = incomingExtra;
+      } else {
+        list[index].extra = mergeExtra(list[index].extra, incomingExtra);
+      }
+    }
+
     if (!save(classId, list)) return { ok: false, reason: 'storage' };
 
     return { ok: true, count: list.length, student: list[index] };
   }
 
-  /* 关键词匹配：姓名、学号、手机号或性别包含关键词就算命中；关键词为空时全部命中。
-     手机号做了「忽略连字符」处理：输入 13800000001 或 138-0000-0001 都能搜到。
+  /* 关键词匹配：姓名、学号、联系方式、性别或任一自定义字段包含关键词就算命中；
+     关键词为空时全部命中。
+     联系方式做了「忽略连字符」处理：输入 13800000001 或 138-0000-0001 都能搜到。
      搜「男」「女」可以把全班男生 / 女生一次筛出来。 */
   function match(student, keyword) {
     if (!keyword) return true;
@@ -649,6 +709,17 @@
     if (name.indexOf(kw) > -1 || sid.indexOf(kw) > -1
       || gender.indexOf(kw) > -1 || contact.indexOf(kw) > -1) {
       return true;
+    }
+
+    // 自定义字段（宿舍号、QQ…）也在搜索范围里
+    var extra = student.extra;
+    if (extra && typeof extra === 'object') {
+      for (var key in extra) {
+        if (!Object.prototype.hasOwnProperty.call(extra, key)) continue;
+        if (String(extra[key] == null ? '' : extra[key]).toLowerCase().indexOf(kw) > -1) {
+          return true;
+        }
+      }
     }
 
     var kwDigits = kw.replace(/\D/g, '');
@@ -816,6 +887,271 @@
     return { ok: true, count: ordered.length + rest.length };
   }
 
+  /* ---------- 自定义字段 ----------
+
+     四位固定字段之外，每个班还可以自己加几栏，比如「宿舍号」「QQ」「家长电话」。
+     （导入 Excel 时表里多出来的列，也会自动变成这里的字段 —— 见 parseRosterText。）
+
+     存储结构：
+       classInfoSite.fields = {
+         'cs-2026-1': [ { key: 'f1', label: '宿舍号' }, { key: 'f2', label: 'QQ' } ]
+       }
+
+     key 是内部标识（自动生成，形如 f1 / f2），生成后就固定不动 ——
+     每份学生记录里的附加内容都以 key 为下标存放：
+       { name: '张三', sid: '…', gender: '男', contact: '…', extra: { f1: '3-201' } }
+
+     改名只动 label、不动 key，所以改个名字不会把同学们填过的内容弄丢。
+  */
+
+  /* 读取所有班级的字段定义（整个对象） */
+  function loadAllFields() {
+    try {
+      var raw = localStorage.getItem(FIELDS_KEY);
+      if (!raw) return {};
+
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      return parsed;
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /* 写回所有班级的字段定义，返回是否成功 */
+  function saveAllFields(map) {
+    try {
+      localStorage.setItem(FIELDS_KEY, JSON.stringify(map));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /* 字段名：首尾去空格，中间连续空白并成一个，并截到长度上限 */
+  function trimLabel(label) {
+    var value = trim(label).replace(/\s+/g, ' ');
+    return value.length > FIELD_LABEL_MAX ? value.slice(0, FIELD_LABEL_MAX) : value;
+  }
+
+  /* 两个字段名算不算同一个（忽略大小写和首尾空格） */
+  function sameLabel(a, b) {
+    return trimLabel(a).toLowerCase() === trimLabel(b).toLowerCase();
+  }
+
+  /*
+    读取某个班的字段列表，返回 [{ key, label }] 的副本。
+    数据损坏或从没设过时返回空数组 —— 调用方不用做额外判断。
+  */
+  function listFields(classId) {
+    if (!classId) return [];
+
+    var list = loadAllFields()[classId];
+    if (!Array.isArray(list)) return [];
+
+    var result = [];
+    for (var i = 0; i < list.length; i++) {
+      if (!list[i] || !list[i].key) continue;
+
+      var label = trimLabel(list[i].label);
+      result.push({ key: String(list[i].key), label: label || String(list[i].key) });
+    }
+    return result;
+  }
+
+  /* 把某个班的字段列表写回存储（传空数组 = 删掉这个班的记录） */
+  function writeFields(classId, list) {
+    var map = loadAllFields();
+
+    if (list && list.length) map[classId] = list;
+    else delete map[classId];
+
+    return saveAllFields(map);
+  }
+
+  /* 生成一个本班没被占用的字段 key（f1、f2……） */
+  function makeFieldKey(classId) {
+    var used = {};
+    var list = listFields(classId);
+    var i;
+
+    for (i = 0; i < list.length; i++) used[list[i].key] = true;
+
+    var n = 1;
+    while (used['f' + n]) n++;
+    return 'f' + n;
+  }
+
+  /*
+    给某个班加一个自定义字段。
+
+    返回 { ok: true, field: { key, label } }
+       或 { ok: false, reason: 'invalid' | 'empty' | 'duplicate' | 'limit' | 'storage' }
+  */
+  function addField(classId, label) {
+    if (!classId) return { ok: false, reason: 'invalid' };
+
+    var name = trimLabel(label);
+    if (!name) return { ok: false, reason: 'empty' };
+
+    var list = listFields(classId);
+    if (list.length >= MAX_FIELDS) return { ok: false, reason: 'limit' };
+
+    for (var i = 0; i < list.length; i++) {
+      if (sameLabel(list[i].label, name)) return { ok: false, reason: 'duplicate' };
+    }
+
+    var field = { key: makeFieldKey(classId), label: name };
+    list.push(field);
+
+    if (!writeFields(classId, list)) return { ok: false, reason: 'storage' };
+    return { ok: true, field: field };
+  }
+
+  /*
+    改一个自定义字段的名字。
+
+    只动 label，不动 key —— 所以同学们在这一栏里填过的内容一条都不会丢。
+
+    返回 { ok: true, field } 或 { ok: false, reason: 'invalid' | 'empty' | 'notfound' | 'duplicate' | 'storage' }
+  */
+  function renameField(classId, key, label) {
+    if (!classId || !key) return { ok: false, reason: 'invalid' };
+
+    var name = trimLabel(label);
+    if (!name) return { ok: false, reason: 'empty' };
+
+    var list = listFields(classId);
+    var target = null;
+
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].key === key) { target = list[i]; continue; }
+      if (sameLabel(list[i].label, name)) return { ok: false, reason: 'duplicate' };
+    }
+
+    if (!target) return { ok: false, reason: 'notfound' };
+
+    target.label = name;
+    if (!writeFields(classId, list)) return { ok: false, reason: 'storage' };
+
+    return { ok: true, field: target };
+  }
+
+  /*
+    删掉一个自定义字段。
+
+    **同时把全班同学在这一栏里填过的内容一并清掉** —— 否则会留下一堆
+    看不见、也导不出来的"幽灵数据"，将来备份、排查时更让人困惑。
+    页面调用前一定会先弹窗告知这一点。
+
+    返回 { ok: true, count: 剩下的字段数 }
+       或 { ok: false, reason: 'invalid' | 'notfound' | 'storage' }
+  */
+  function removeField(classId, key) {
+    if (!classId || !key) return { ok: false, reason: 'invalid' };
+
+    var list = listFields(classId);
+    var kept = [];
+    var found = false;
+    var i;
+
+    for (i = 0; i < list.length; i++) {
+      if (list[i].key === key) { found = true; continue; }
+      kept.push(list[i]);
+    }
+
+    if (!found) return { ok: false, reason: 'notfound' };
+    if (!writeFields(classId, kept)) return { ok: false, reason: 'storage' };
+
+    var students = load(classId);
+    var touched = false;
+
+    for (i = 0; i < students.length; i++) {
+      if (students[i] && students[i].extra && students[i].extra[key] !== undefined) {
+        delete students[i].extra[key];
+        touched = true;
+      }
+    }
+
+    if (touched && !save(classId, students)) return { ok: false, reason: 'storage' };
+
+    return { ok: true, count: kept.length };
+  }
+
+  /*
+    按一串「字段名」准备字段：已有的直接复用，没有的当场新建。
+    返回与传入的 labels 一一对应的数组，某一项建不出来时该位置是 null。
+
+    批量导入用它 —— Excel 表头里冒出来的新列（宿舍号、QQ…）
+    不用用户先去手动建字段，导一次就自动成了本班的字段。
+  */
+  function ensureFields(classId, labels) {
+    var result = [];
+    if (!classId || !labels) return result;
+
+    for (var i = 0; i < labels.length; i++) {
+      var name = trimLabel(labels[i]);
+      if (!name) { result.push(null); continue; }
+
+      var list = listFields(classId);
+      var found = null;
+      var j;
+
+      for (j = 0; j < list.length; j++) {
+        if (sameLabel(list[j].label, name)) { found = list[j]; break; }
+      }
+
+      if (!found) {
+        var added = addField(classId, name);
+        if (!added.ok) { result.push(null); continue; }
+        found = added.field;
+      }
+
+      result.push(found);
+    }
+
+    return result;
+  }
+
+  /*
+    把一份「附加内容」规整成 { 字段key: 值 }：
+      · 只保留 fields 里确实定义过的 key（删掉字段后残留的内容不会复现）
+      · 值去掉首尾空格、超长的截断、空值不存
+  */
+  function normalizeExtra(extra, fields) {
+    var result = {};
+    if (!extra || typeof extra !== 'object' || !fields) return result;
+
+    for (var i = 0; i < fields.length; i++) {
+      var value = trim(extra[fields[i].key]);
+      if (!value) continue;
+
+      if (value.length > FIELD_VALUE_MAX) value = value.slice(0, FIELD_VALUE_MAX);
+      result[fields[i].key] = value;
+    }
+
+    return result;
+  }
+
+  /* 合并两份附加内容：base 打底，patch 里有值的键盖上去（没提到的键保持原样） */
+  function mergeExtra(base, patch) {
+    var result = {};
+    var key;
+
+    if (base && typeof base === 'object') {
+      for (key in base) {
+        if (Object.prototype.hasOwnProperty.call(base, key)) result[key] = base[key];
+      }
+    }
+    if (patch && typeof patch === 'object') {
+      for (key in patch) {
+        if (Object.prototype.hasOwnProperty.call(patch, key)) result[key] = patch[key];
+      }
+    }
+
+    return result;
+  }
+
   /* ============================================================
      五、按学号排序 / 批量导入
      ============================================================ */
@@ -886,6 +1222,12 @@
     contact: ['手机', '电话', '联系方式', '联系', 'contact', 'phone', 'tel', 'mobile']
   };
 
+  /*
+    这些表头是「辅助列」，不算学生信息，导入时直接忽略、也不会变成自定义字段。
+    最典型的是我们自己导出的 CSV 里的「序号」那一列。
+  */
+  var IGNORE_HINTS = ['序号', '编号', '排序', '序', 'no', 'no.', 'index', '#', 'id'];
+
   /* 把一行文本按分隔符拆成若干格。
      不能简单 split —— Excel 导出的 CSV 里，内容含逗号的格子会被双引号包起来，
      内部的两个连续引号表示一个真的引号。这几行就是处理这件事的。 */
@@ -951,6 +1293,49 @@
     return false;
   }
 
+  /* 这一列是不是「序号」这种纯辅助列（导入时忽略，也不变成自定义字段） */
+  function isIgnoredHeader(label) {
+    var cell = String(label).trim().toLowerCase();
+
+    for (var i = 0; i < IGNORE_HINTS.length; i++) {
+      if (cell === IGNORE_HINTS[i]) return true;
+    }
+    // 「第 1 列」这种占位表头也一并忽略
+    return /^第\s*\d+\s*列$/.test(cell);
+  }
+
+  /*
+    表头里「没有被姓名 / 性别 / 学号 / 联系方式占用、也不是序号之类辅助列」
+    的那些列，就是本表自带的其它信息 —— 宿舍号、QQ、备注……
+
+    这些列会被自动变成这个班的自定义字段（见 ensureFields），
+    所以别人的 Excel 里多出几栏，导进来也不会被丢掉。
+  */
+  function detectExtraColumns(headerCells, columns) {
+    var used = {};
+    used[columns.name] = true;
+    used[columns.gender] = true;
+    used[columns.sid] = true;
+    used[columns.contact] = true;
+
+    var result = [];
+
+    for (var i = 0; i < headerCells.length; i++) {
+      if (used[i]) continue;
+
+      var label = trim(headerCells[i]);
+      if (!label) continue;                  // 没写表头名的列没法当字段
+      if (isIgnoredHeader(label)) continue;  // 序号之类的辅助列
+
+      result.push({
+        index: i,
+        label: label.length > FIELD_LABEL_MAX ? label.slice(0, FIELD_LABEL_MAX) : label
+      });
+    }
+
+    return result;
+  }
+
   /* 这一格像不像「性别」：空的也算像（性别允许不填） */
   function looksLikeGender(cell) {
     var v = trim(cell);
@@ -969,22 +1354,32 @@
         delimiter: ',' 或 '\t',
         columns:   { name, gender, sid, contact }  —— 最终采用的列位置（-1 表示没有）
         header:    表头文字数组（没有表头时是 null）,
+        extraColumns: [ { index: 5, label: '宿舍号' } ]
+                   —— 表里多出来的列（不是姓名/性别/学号/联系方式，也不是序号），
+                      会被当成这个班的自定义字段；没有表头时这一项是空数组
         rows: [
-          { line: 2, ok: true, name, gender, sid, contact },
+          { line: 2, ok: true, name, gender, sid, contact, extras: { 5: '3-201' } },
           { line: 5, ok: false, reason: 'sid-format', raw: '…' }   —— 这一行有问题
         ],
         total: 行数, usable: 可用行数, errorCount: 问题行数
       }
     或 { ok: false, reason: 'empty' }
 
+    校验尺度：
+      · 姓名、学号是**必须有的**（没有姓名不知道是谁，没有学号没法查重）
+      · 性别、联系方式、以及任何自定义字段都是**选填**，填什么都不算错
+        （联系方式是自由文本：手机号、座机、邮箱、QQ 都收）
+
     列位置的判定规则（按优先级）：
-      1. 第一行被认出是表头 → 按表头文字定位每一列（最准，推荐）
+      1. 第一行被认出是表头 → 按表头文字定位每一列（最准，推荐）；
+         剩下没被认领的列进 extraColumns，成为本班的新字段
       2. 没有表头 → 按位置猜：
-         · 3 列及以下：姓名 / 学号 / 手机号
-         · 4 列及以上：姓名 / 性别 / 学号 / 手机号
+         · 3 列及以下：姓名 / 学号 / 联系方式
+         · 4 列及以上：姓名 / 性别 / 学号 / 联系方式
          · 如果第 1 格是纯数字、第 2 格又不像性别（比如导出的 CSV 删掉了表头、
            但「序号」那一列还在），就整体往右挪一位；
            挪完之后再看一格：第 3 格像性别就有性别列，否则按没有性别列处理。
+         · 这种情况下列名无从得知，多出来的列只能忽略（要额外字段请写表头）
   */
   function parseRosterText(text) {
     var raw = String(text == null ? '' : text).replace(/^\ufeff/, '');  // 去掉可能的 BOM
@@ -1004,6 +1399,7 @@
 
     var header = null;
     var columns = null;
+    var extraColumns = [];
     var rows = [];
     var seenSid = {};
 
@@ -1038,7 +1434,12 @@
         contact: detectColumn(firstCells, 'contact')
       };
       // 表头里没写「学号」之类能认出来的字眼，就退回按位置猜
-      if (columns.sid === -1) columns = null;
+      if (columns.sid === -1) {
+        columns = null;
+      } else {
+        // 认得出四位固定字段了，剩下没被认领的列就是本表自带的其它信息
+        extraColumns = detectExtraColumns(firstCells, columns);
+      }
     }
 
     for (i = startLine; i < lines.length; i++) {
@@ -1064,7 +1465,7 @@
             map = { name: 0, gender: 1, sid: 2, contact: 3 };
           }
         } else {
-          // 三列或更少：按「姓名 / 学号 / 手机号」对应，性别留空
+          // 三列或更少：按「姓名 / 学号 / 联系方式」对应，性别留空
           map = { name: 0, gender: -1, sid: 1, contact: 2 };
         }
       }
@@ -1081,6 +1482,15 @@
         contact: normalizeContact(pick(map.contact))
       };
 
+      // 表里多出来的列：按列位置记下来，页面确认导入时会把它们写成自定义字段
+      if (extraColumns.length) {
+        row.extras = {};
+        for (var k = 0; k < extraColumns.length; k++) {
+          var extraValue = trim(pick(extraColumns[k].index));
+          if (extraValue) row.extras[extraColumns[k].index] = extraValue;
+        }
+      }
+
       // 逐项校验，第一个出问题的地方作为这一行的失败原因
       var sidCheck = checkSid(row.sid);
 
@@ -1090,9 +1500,6 @@
       } else if (!sidCheck.ok) {
         row.ok = false;
         row.reason = sidCheck.reason === 'empty' ? 'no-sid' : 'sid-format';
-      } else if (row.contact && !/^1[3-9]\d{9}$/.test(row.contact)) {
-        row.ok = false;
-        row.reason = 'contact-format';
       } else if (seenSid[row.sid]) {
         // 同一个文件里出现了两次相同学号 —— 只认第一条，后面这条跳过
         row.ok = false;
@@ -1116,6 +1523,7 @@
       delimiter: delimiter,
       columns: columns,
       header: header,
+      extraColumns: extraColumns,
       rows: rows,
       total: rows.length,
       usable: usable,
@@ -1140,12 +1548,17 @@
     或 { ok: false, reason: 'invalid' | 'storage' }
 
     无论哪种模式，都不会删除本班原有的同学。
+
+    关于自定义字段：rows 里每一项可以带一个 extra（{ 字段key: 值 }）。
+    调用前请先用 ensureFields() 把表格里新冒出来的列建成字段，
+    否则那些列的内容会因为「不是本班字段」而被丢弃。
   */
   function mergeRoster(classId, rows, mode) {
     if (!classId || !rows || !rows.length) return { ok: false, reason: 'invalid' };
 
     var overwrite = (mode === 'overwrite');
     var list = load(classId);
+    var fields = listFields(classId);   // 自定义字段（页面对新列调过 ensureFields 之后才准）
     var indexOf = {};
     var i;
 
@@ -1169,7 +1582,8 @@
         name: name,
         sid: sid,
         gender: normalizeGender(row.gender),
-        contact: normalizeContact(row.contact)
+        contact: normalizeContact(row.contact),
+        extra: normalizeExtra(row.extra, fields)
       };
 
       if (indexOf[sid] === undefined) {
@@ -1177,7 +1591,21 @@
         list.push(student);
         added++;
       } else if (overwrite) {
-        list[indexOf[sid]] = student;
+        /*
+          覆盖时，自定义字段只覆盖「这次确实带值」的那几栏，
+          原来填过、这次表格里没有的栏保持不动 ——
+          这样「只导一份姓名学号的名单」不会顺手把宿舍号抹掉。
+        */
+        var previous = list[indexOf[sid]];
+        var merged = {
+          name: name,
+          sid: sid,
+          gender: normalizeGender(row.gender),
+          contact: normalizeContact(row.contact),
+          extra: mergeExtra(previous && previous.extra, student.extra)
+        };
+
+        list[indexOf[sid]] = merged;
         updated++;
       } else {
         skipped++;
@@ -1219,6 +1647,7 @@
       · 所有班级的名单
       · 页面上新建的班级
       · 设置过的学校名
+      · 各班的自定义字段
 
     首页的「数据管理」里有对应按钮，会先弹窗确认再调用它。
   */
@@ -1231,6 +1660,7 @@
       localStorage.removeItem(CLASSES_KEY);
       localStorage.removeItem(SCHOOL_KEY);
       localStorage.removeItem(HIDDEN_KEY);   // 被删掉的预置班级也一并恢复
+      localStorage.removeItem(FIELDS_KEY);   // 自定义字段
     } catch (e) {
       // 存储不可用时本来就没有数据可清，忽略即可
     }
@@ -1324,13 +1754,27 @@
 
     // 性别规整：'男' / '女' / ''（未填写）
     normalizeGender: normalizeGender,
+    // 联系方式规整：像 11 位手机号就存纯数字，其它内容原样保留
+    normalizeContact: normalizeContact,
 
     STUDENT_PREFIX: STUDENT_PREFIX,
     CLASSES_KEY: CLASSES_KEY,
     SCHOOL_KEY: SCHOOL_KEY,
     HIDDEN_KEY: HIDDEN_KEY,
+    FIELDS_KEY: FIELDS_KEY,
     DEFAULT_CLASSES: DEFAULT_CLASSES,
     DEFAULT_ROSTERS: DEFAULT_ROSTERS,
+
+    // 自定义字段（每个班可以有自己的附加栏，如宿舍号、QQ）
+    MAX_FIELDS: MAX_FIELDS,
+    FIELD_LABEL_MAX: FIELD_LABEL_MAX,
+    FIELD_VALUE_MAX: FIELD_VALUE_MAX,
+    listFields: listFields,
+    addField: addField,
+    renameField: renameField,
+    removeField: removeField,
+    ensureFields: ensureFields,
+    normalizeExtra: normalizeExtra,
 
     // 学校名（首页可以改，存在浏览器本地）
     getSchoolName: getSchoolName,
