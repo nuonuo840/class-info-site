@@ -2,13 +2,20 @@
 <!--
   ============================================================
   页面二：班级名单（roster.html）
-  作用：用 table 表格展示全部同学信息。
-        表格结构：table > caption（表格标题）
-                  table > thead > tr > th（表头）
-                  table > tbody > tr > td（数据行）
+  作用：用 table 表格展示「某一个班级」的全部同学信息。
+
+  重要变化（本版起）：
+    这个页面不再固定对应某一个班，而是通过网址参数 c 指定要看哪个班级，
+    例如 roster.html?c=cs-2026-1 表示「计算机科学与技术 2026 级 1 班」。
+    同一份 HTML 服务所有班级，将来加班级不用新建文件。
+
+    没带 c 参数、或带的编号不存在时，本页不再把人赶回首页，
+    而是就地显示「专业 → 班级」选择器，选完直接进入。这样失效链接不再是死路。
+
+  表格结构：table > caption（表格标题）
+            table > thead > tr > th（表头）
+            table > tbody > tr > td（数据行）
   数据来源：不写死在 HTML 里，而是由 app.js 提供（见页面底部的脚本）。
-            这样加人只需要改 app.js 里的一个数组，
-            序号和人数统计都会自动算出来，不用手动同步。
   ============================================================
 -->
 <html lang="zh-CN">
@@ -20,22 +27,21 @@
   <meta name="description" content="班级同学名单，表格展示姓名、学号与联系方式，支持关键词搜索，可直接打印。">
   <!-- 浏览器标签页图标 -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <title>班级名单 - 班级信息台</title>
+  <title>班级名单 - 班级信息平台</title>
   <!-- 引入公共样式表 -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ========== 顶部导航栏（三个页面通用） ========== -->
+  <!-- ========== 顶部导航栏 ========== -->
   <header class="site-header">
     <div class="container header-inner">
-      <!-- 站点 Logo，点击回到首页 -->
-      <a class="logo" href="index.html">🧩 计科 2026 班级信息台</a>
+      <a class="logo" href="index.html">🧩 <span class="school-name"></span> 班级信息平台</a>
       <nav class="nav">
         <a href="index.html">首页</a>
-        <!-- 当前页面高亮：给 a 标签加 active 类 -->
-        <a href="roster.html" class="active">班级名单</a>
-        <a href="form.html">信息录入</a>
+        <!-- 当前页面高亮。这里的链接由脚本补上 ?c=班级id，指向当前班级 -->
+        <a href="roster.html" id="navRoster" class="active">班级名单</a>
+        <a href="form.html" id="navForm">信息录入</a>
       </nav>
     </div>
   </header>
@@ -43,12 +49,85 @@
   <!-- ========== 主体内容 ========== -->
   <main class="container">
 
-    <section class="card">
-      <h2>班级名单</h2>
-      <p>
-        下表为计算机类专业 2026 级全体同学信息。
-        <span class="no-print">名单保存在本机浏览器，可在「信息录入」页继续添加新同学。</span>
+    <!--
+      面包屑：显示当前位置，方便随时回到首页换成别的班级。
+      打印时不显示（class="no-print"）。
+    -->
+    <nav class="breadcrumb no-print" id="breadcrumb" aria-label="当前位置" hidden>
+      <a href="index.html">首页</a>
+      <span class="crumb-sep">›</span>
+      <span id="crumbMajor"></span>
+      <span class="crumb-sep">›</span>
+      <span class="crumb-current" id="crumbClass"></span>
+    </nav>
+
+    <!--
+      情况一：网址里没带班级参数，或指定的班级不存在。
+      不再只说一句「请回首页」，而是就地给出班级选择器 —— 失效链接也能继续用。
+      默认隐藏，由脚本判断后决定显示。
+    -->
+    <section class="card" id="noticeCard" hidden>
+      <h2 id="noticeTitle">请选择要查看的班级</h2>
+      <p id="noticeText">
+        这个页面需要知道「看哪个班」。在下面选好专业和班级即可。
       </p>
+
+      <!-- 编号无效时用橙色警告说明原因；没带编号时不显示 -->
+      <div class="msg" id="noticeMsg" role="status" aria-live="polite"></div>
+
+      <!-- 选班区：专业 + 班级联动下拉，「查看名单」按钮实时指向选中的班级 -->
+      <div id="pickerBlock">
+        <div class="class-picker">
+          <p class="picker-label">查看哪个班的名单？</p>
+
+          <div class="picker">
+            <div class="form-item">
+              <label for="majorSelect">专业</label>
+              <!-- 选项由脚本根据班级目录生成 -->
+              <select id="majorSelect" class="input"></select>
+            </div>
+            <div class="form-item">
+              <label for="classSelect">班级</label>
+              <!-- 选项会随「专业」的选择联动变化 -->
+              <select id="classSelect" class="input"></select>
+            </div>
+          </div>
+
+          <p class="form-hint" id="pickerHint"></p>
+        </div>
+
+        <div class="picker-actions">
+          <!--
+            用 <a> 而不是 <button>：脚本只需更新 href，浏览器原生负责跳转，
+            这样中键 / Ctrl+点击「在新标签页打开」也能用。
+          -->
+          <a class="btn-submit btn-link" id="goRoster" href="roster.html">查看名单</a>
+        </div>
+      </div>
+
+      <!-- 班级目录为空时的兜底：无处可选，只能回首页新建 -->
+      <p class="notice-actions" id="noticeFallback" hidden>
+        <a class="btn-submit btn-link" href="index.html">回到首页新建班级</a>
+      </p>
+    </section>
+
+    <!--
+      情况二：正常显示某个班级的名单。
+      默认隐藏，脚本确认班级有效后显示。
+    -->
+    <section class="card" id="rosterCard" hidden>
+
+      <!-- 班级标题区：大字显示班级全名，下面一行小字说明人数与操作方式 -->
+      <div class="class-head">
+        <h2 id="classTitle">班级名单</h2>
+        <p class="class-sub" id="classSub"></p>
+      </div>
+
+      <!--
+        编辑结果提示条：默认隐藏（CSS 里 display:none），保存后由脚本控制显示。
+        role="status" + aria-live 让屏幕阅读器也能读出保存结果。
+      -->
+      <div class="msg" id="msg" role="status" aria-live="polite"></div>
 
       <!-- 搜索框：输入姓名、学号或手机号即时筛选。打印时自动隐藏 -->
       <div class="table-toolbar no-print">
@@ -66,7 +145,7 @@
       <div class="table-wrap" role="region" aria-label="班级同学名单" tabindex="0">
         <table>
           <!-- 表格标题：视觉上隐藏，供屏幕阅读器朗读 -->
-          <caption class="sr-only">班级同学名单，包含序号、姓名、学号和联系方式四列</caption>
+          <caption class="sr-only">班级同学名单，包含序号、姓名、学号、联系方式和操作五列</caption>
 
           <!-- 表头：scope="col" 告诉屏幕阅读器这是列标题 -->
           <thead>
@@ -75,6 +154,11 @@
               <th scope="col">姓名</th>
               <th scope="col">学号</th>
               <th scope="col">联系方式</th>
+              <!--
+                操作列：放「编辑」按钮。加 no-print，打印名单时这一列自动隐藏
+                （见 style.css 的 @media print），纸上不会出现按钮。
+              -->
+              <th scope="col" class="col-action no-print">操作</th>
             </tr>
           </thead>
 
@@ -91,18 +175,18 @@
       <p class="table-tip" id="rosterCount">正在加载名单…</p>
     </section>
 
-    <!-- 底部回到首页的便捷入口（打印时不显示） -->
-    <section class="card no-print">
+    <!-- 底部快捷入口（打印时不显示） -->
+    <section class="card no-print" id="relatedCard" hidden>
       <h2>相关操作</h2>
       <div class="link-grid">
         <!-- 点击整块卡片即可跳转，提升可点击面积 -->
-        <a class="link-box" href="form.html">
-          <strong>✍️ 去录入新同学 →</strong>
+        <a class="link-box" href="form.html" id="linkForm">
+          <strong>✍️ 给这个班录入新同学 →</strong>
           <span>填写姓名、学号和手机号，提交后立刻出现在本页</span>
         </a>
         <a class="link-box" href="index.html">
-          <strong>🏠 返回首页 →</strong>
-          <span>查看项目介绍与班级简介</span>
+          <strong>🏫 切换班级 →</strong>
+          <span>回到首页，选择别的专业班级</span>
         </a>
       </div>
     </section>
@@ -111,26 +195,214 @@
 
   <!-- ========== 页脚 ========== -->
   <footer class="site-footer no-print">
-    <p>班级信息静态网页系统 &copy; 2026 · 计算机类专业 2026 级</p>
+    <p>班级信息平台 &copy; 2026 · <span class="school-name"></span></p>
   </footer>
 
-  <!-- 数据层：提供同学名单的读取与保存 -->
+  <!-- 数据层：提供班级目录与同学名单 -->
   <script src="app.js"></script>
   <script>
     /*
-      名单页脚本：读取名单 → 生成表格 → 支持关键词筛选
+      名单页脚本，流程：
+        1. 从网址里取出班级 id（?c=xxx），到班级目录里查这个班
+           - 查得到 → 显示班级标题、面包屑，继续往下渲染表格
+           - 查不到（没带参数，或编号不存在）→ 就地显示「专业 → 班级」选择器，
+             选完点「查看名单」直接进入，不再把人赶回首页
+        2. 读取该班名单 → 生成表格
+        3. 支持关键词筛选
+        4. 支持行内修改（点「编辑」就地变输入框）
 
-      两个要点：
+      三个要点：
         1. 单元格内容用 textContent 写入，而不是 innerHTML。
            因为名单来自用户输入，用 innerHTML 拼接会有被当成 HTML 执行的风险（XSS）。
         2. 序号取「该同学在完整名单中的位置」，而不是筛选结果里的序号。
            这样搜索之后序号依然对应真实排名，不会重新从 1 开始。
+        3. 编辑是「就地」进行的：点某行的「编辑」，这一行的三个字段立刻变成输入框，
+           不用跳页、不用弹窗；改完点「保存」写回本地存储。
     */
     (function () {
       var tbody = document.getElementById('rosterBody');
       var countEl = document.getElementById('rosterCount');
       var searchBox = document.getElementById('searchBox');
-      var all = ClassData.load();   // 完整名单，只读一次
+      var msgEl = document.getElementById('msg');
+      var breadcrumb = document.getElementById('breadcrumb');
+      var noticeCard = document.getElementById('noticeCard');
+      var noticeTitle = document.getElementById('noticeTitle');
+      var noticeText = document.getElementById('noticeText');
+      var noticeMsg = document.getElementById('noticeMsg');
+      var noticeFallback = document.getElementById('noticeFallback');
+      var pickerBlock = document.getElementById('pickerBlock');
+      var majorSelect = document.getElementById('majorSelect');
+      var classSelect = document.getElementById('classSelect');
+      var pickerHint = document.getElementById('pickerHint');
+      var goRoster = document.getElementById('goRoster');
+      var rosterCard = document.getElementById('rosterCard');
+      var relatedCard = document.getElementById('relatedCard');
+      var classTitle = document.getElementById('classTitle');
+      var classSub = document.getElementById('classSub');
+      var navRoster = document.getElementById('navRoster');
+      var navForm = document.getElementById('navForm');
+
+      /* ---------- 0. 公共：填充学校名 ---------- */
+      var schoolEls = document.querySelectorAll('.school-name');
+      for (var s = 0; s < schoolEls.length; s++) {
+        schoolEls[s].textContent = ClassData.SCHOOL;
+      }
+
+      /* ---------- 1. 班级参数无效时的「就地选班」 ---------- */
+
+      /* 「专业」下拉框：列出班级目录里出现过的全部专业 */
+      function renderMajors(selected) {
+        var majors = ClassData.listMajors();
+
+        majorSelect.textContent = '';   // 清空后重建，避免重复
+        majors.forEach(function (major) {
+          var option = document.createElement('option');
+          option.value = major;
+          option.textContent = major;
+          majorSelect.appendChild(option);
+        });
+
+        // 尽量保留原来选中的专业；没有就选第一个
+        majorSelect.value = (selected && majors.indexOf(selected) > -1) ? selected : (majors[0] || '');
+      }
+
+      /* 「班级」下拉框：只列出当前专业下的班级，随专业联动 */
+      function renderClasses(major, selected) {
+        var classes = ClassData.listClassesByMajor(major);
+
+        classSelect.textContent = '';   // 清空后重建
+
+        if (classes.length === 0) {
+          var empty = document.createElement('option');
+          empty.value = '';
+          empty.textContent = '（该专业暂无班级）';
+          classSelect.appendChild(empty);
+          classSelect.disabled = true;
+          return;
+        }
+
+        classSelect.disabled = false;
+        classes.forEach(function (cls) {
+          var option = document.createElement('option');
+          option.value = cls.id;
+          // 下拉里只显示「年级 + 班名」（专业已经在左边选好了）
+          option.textContent = cls.grade + ' 级 ' + cls.name;
+          classSelect.appendChild(option);
+        });
+
+        var ids = classes.map(function (c) { return c.id; });
+        classSelect.value = (selected && ids.indexOf(selected) > -1) ? selected : classes[0].id;
+      }
+
+      /* 当前选中的班级 id（下拉框被禁用时视为空） */
+      function currentClassId() {
+        return classSelect.disabled ? '' : classSelect.value;
+      }
+
+      /* 选中哪个班，提示行和各个链接就一起指向哪个班 */
+      function syncPicker() {
+        var picked = ClassData.getClass(currentClassId());
+
+        if (!picked) {
+          pickerHint.textContent = '这个专业下还没有班级，可以回首页新建一个。';
+          goRoster.href = 'index.html';
+          navRoster.href = 'roster.html';
+          navForm.href = 'index.html';
+          return;
+        }
+
+        pickerHint.textContent = '选中后即可查看：' + ClassData.getClassName(picked)
+          + ' · 共 ' + ClassData.load(picked.id).length + ' 名同学';
+
+        goRoster.href = ClassData.buildUrl('roster.html', picked.id);
+        navRoster.href = ClassData.buildUrl('roster.html', picked.id);
+        navForm.href = ClassData.buildUrl('form.html', picked.id);
+      }
+
+      /*
+        班级参数无效时显示这张卡片。两种情况：
+          ① 没带 c 参数（例如点了旧书签、手敲网址）—— 静默给个选择器即可；
+          ② 带了 c 但编号不存在（链接被截断、班级被移除、或者是别人在他电脑上新建的班）
+             —— 用橙色警告说明原因，再让他重选。
+      */
+      function setupPicker(rawId) {
+        noticeCard.hidden = false;
+        breadcrumb.hidden = true;
+        rosterCard.hidden = true;
+        relatedCard.hidden = true;
+
+        // 班级目录为空：无处可选，只能引导回首页新建
+        if (ClassData.listClasses().length === 0) {
+          pickerBlock.hidden = true;
+          noticeFallback.hidden = false;
+          noticeTitle.textContent = '还没有任何班级';
+          noticeText.textContent = '班级目录里一个班级都没有，请先回首页新建一个班级。';
+          navRoster.href = 'index.html';
+          navForm.href = 'index.html';
+          return;
+        }
+
+        noticeTitle.textContent = '请选择要查看的班级';
+        noticeText.textContent = '在下面选好专业和班级，点「查看名单」即可。';
+
+        if (rawId) {
+          noticeText.textContent = '你可以直接在下面选一个班级查看。';
+          noticeMsg.className = 'msg msg-warn';
+          noticeMsg.textContent = '网址里的班级编号「' + rawId + '」不存在 —— '
+            + '可能是链接过期了、被截断了，或者这个班是在别的电脑上新建的。';
+          noticeMsg.style.display = 'block';
+        }
+
+        renderMajors('');
+        renderClasses(majorSelect.value, '');
+        syncPicker();
+
+        // 下拉框的联动只在这一分支里用得上，就地挂上事件
+        majorSelect.addEventListener('change', function () {
+          renderClasses(majorSelect.value, '');
+          syncPicker();
+        });
+        classSelect.addEventListener('change', syncPicker);
+      }
+
+      /* ---------- 2. 确定当前班级 ---------- */
+
+      var rawId = ClassData.param('c');          // 网址里写的班级 id（可能是空、也可能不存在）
+      var cls = ClassData.getClass(rawId);       // 到班级目录里查一下
+
+      if (!cls) {
+        setupPicker(rawId);   // 网址没带班级 / 带的编号不存在 → 就地选班
+        return;               // 后面的渲染逻辑不再执行
+      }
+
+      /* ---------- 3. 班级有效：显示标题、面包屑，接好各种链接 ---------- */
+
+      var classId = cls.id;
+      var className = ClassData.getClassName(cls);
+      var all = ClassData.load(classId);   // 完整名单，后面每次修改后都会重新读一遍
+
+      document.title = className + ' - 班级信息平台';
+      classTitle.textContent = className;
+      classSub.textContent = '班级名单 · 数据保存在本机浏览器，点表格右侧「编辑」可直接修改';
+
+      document.getElementById('crumbMajor').textContent = cls.major;
+      document.getElementById('crumbClass').textContent = cls.grade + ' 级 ' + cls.name;
+      breadcrumb.hidden = false;
+
+      rosterCard.hidden = false;
+      relatedCard.hidden = false;
+
+      // 导航与底部入口都带上当前班级，避免跳到别的班或空页面
+      navRoster.href = ClassData.buildUrl('roster.html', classId);
+      navForm.href = ClassData.buildUrl('form.html', classId);
+      document.getElementById('linkForm').href = ClassData.buildUrl('form.html', classId);
+
+      /*
+        当前正在编辑的那位同学的「原学号」，null 表示没有人在编辑。
+        为什么记原学号而不是行号：学号本身也是允许修改的字段，
+        必须用「改之前」的值才能定位到这条记录。
+      */
+      var editingSid = null;
 
       /*
         联系方式显示格式化：
@@ -147,31 +419,214 @@
         return contact ? String(contact) : '—';
       }
 
+      /* 格式校验：规则与录入页 form.html 的 pattern 保持一致 */
+      function isValidSid(sid) {
+        return /^\d{10}$/.test(sid);          // 学号：10 位数字
+      }
+
+      function isValidContact(contact) {
+        return /^1[3-9]\d{9}$/.test(contact); // 手机号：1 开头、第 2 位 3~9、共 11 位
+      }
+
+      /* 提示条：isError 为 true 时显示红色版本 */
+      function showMsg(text, isError) {
+        msgEl.className = isError ? 'msg msg-error' : 'msg';
+        msgEl.textContent = text;
+        msgEl.style.display = 'block';
+      }
+
+      function hideMsg() {
+        msgEl.style.display = 'none';
+        msgEl.textContent = '';
+      }
+
+      /*
+        编辑期间禁用搜索框。
+        原因：搜索会重新渲染整张表格，正在输入的草稿会跟着消失。
+        直接禁用比"悄悄丢掉用户输入"更好预期。
+      */
+      function setSearchEnabled(enabled) {
+        searchBox.disabled = !enabled;
+        searchBox.title = enabled ? '' : '正在编辑中，保存或取消后才能搜索';
+      }
+
+      /* 造一个纯文本单元格 */
+      function makeTextCell(text) {
+        var td = document.createElement('td');
+        td.textContent = text;
+        return td;
+      }
+
+      /* 造一个编辑用的输入框（用 value 赋值，同样避免 XSS） */
+      function makeInput(id, value, ariaLabel, maxLength, inputMode) {
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.id = id;
+        input.className = 'cell-input';
+        input.value = value == null ? '' : String(value);
+        input.setAttribute('aria-label', ariaLabel);
+        if (maxLength) input.maxLength = maxLength;
+        if (inputMode) input.inputMode = inputMode;
+        return input;
+      }
+
+      /* 造一个操作列上的小按钮 */
+      function makeButton(text, extraClass, ariaLabel, onClick) {
+        var btn = document.createElement('button');
+        btn.type = 'button';               // 不在表单里，但显式声明避免将来被误当成提交按钮
+        btn.className = 'btn-mini ' + extraClass;
+        btn.textContent = text;
+        btn.setAttribute('aria-label', ariaLabel);
+        btn.addEventListener('click', onClick);
+        return btn;
+      }
+
+      /* ---------- 进入 / 退出编辑状态 ---------- */
+
+      function startEdit(sid) {
+        editingSid = sid;
+        hideMsg();
+        setSearchEnabled(false);
+        render(searchBox.value);
+
+        // 光标直接落到姓名框并全选，方便直接改写
+        var nameInput = document.getElementById('editName');
+        if (nameInput) {
+          nameInput.focus();
+          nameInput.select();
+        }
+      }
+
+      function cancelEdit() {
+        editingSid = null;
+        hideMsg();
+        setSearchEnabled(true);
+        render(searchBox.value);
+      }
+
+      /* 保存这一行的修改 */
+      function saveEdit(oldSid) {
+        var nameInput = document.getElementById('editName');
+        var sidInput = document.getElementById('editSid');
+        var contactInput = document.getElementById('editContact');
+
+        // 已经不在编辑状态（比如连点两次保存）就直接返回
+        if (!nameInput || !sidInput || !contactInput) return;
+
+        var name = nameInput.value.trim();
+        var sid = sidInput.value.trim();
+        var contact = contactInput.value.trim();
+
+        /*
+          校验不通过时【不重新渲染】—— 否则用户刚敲进去的内容会被清空。
+          只弹提示并让光标回到出问题的那个输入框。
+        */
+        if (!name) {
+          showMsg('姓名不能为空。', true);
+          nameInput.focus();
+          return;
+        }
+        if (!isValidSid(sid)) {
+          showMsg('学号应为 10 位数字，例如 2026110113。', true);
+          sidInput.focus();
+          return;
+        }
+        if (!isValidContact(contact)) {
+          showMsg('手机号应为 11 位纯数字，不要空格或横线，例如 13800000001。', true);
+          contactInput.focus();
+          return;
+        }
+
+        // 注意：第一个参数是班级 id，第二个是这位同学「改之前」的学号
+        var result = ClassData.update(classId, oldSid, { name: name, sid: sid, contact: contact });
+
+        if (!result.ok) {
+          var reasons = {
+            notfound: '没找到学号 ' + oldSid + ' 对应的同学，名单可能已在别处被改动，请刷新页面重试。',
+            duplicate: '学号 ' + sid + ' 已被本班另一位同学占用，请换一个学号。',
+            storage: '保存失败，请检查浏览器是否禁用了本地存储。'
+          };
+          showMsg(reasons[result.reason] || '保存失败。', true);
+          return;
+        }
+
+        // 保存成功：退出编辑状态，重新读一遍数据后重绘
+        editingSid = null;
+        all = ClassData.load(classId);
+        setSearchEnabled(true);
+        render(searchBox.value);
+        showMsg('已保存：' + name + '（学号 ' + sid + '，手机号 ' + formatContact(contact) + '）。', false);
+      }
+
+      /* ---------- 渲染整张表 ---------- */
+
       function render(keyword) {
         var kw = (keyword || '').trim();
         var shown = 0;
 
-        tbody.innerHTML = '';       // 清空旧内容，重新生成
+        tbody.textContent = '';       // 清空旧内容，重新生成
 
         all.forEach(function (student, index) {
           if (!ClassData.match(student, kw)) return;
           shown++;
 
           var tr = document.createElement('tr');
+          var editing = (student.sid === editingSid);
 
-          // 一行四个单元格：序号 / 姓名 / 学号 / 联系方式
-          var cells = [
-            String(index + 1),
-            student.name,
-            student.sid,
-            formatContact(student.contact)   // 11 位手机号会显示成 138-0000-0001
-          ];
+          if (editing) tr.className = 'row-editing';
 
-          cells.forEach(function (text) {
+          // 第一格永远是序号
+          tr.appendChild(makeTextCell(String(index + 1)));
+
+          if (editing) {
+            /* ===== 编辑状态：三个字段换成输入框，操作列换成「保存 / 取消」 ===== */
+
+            var nameTd = document.createElement('td');
+            nameTd.appendChild(makeInput('editName', student.name, '姓名', 30));
+
+            var sidTd = document.createElement('td');
+            sidTd.appendChild(makeInput('editSid', student.sid, '学号', 10, 'numeric'));
+
+            var contactTd = document.createElement('td');
+            contactTd.appendChild(makeInput('editContact', student.contact, '手机号', 11, 'numeric'));
+
+            var actionTd = document.createElement('td');
+            actionTd.className = 'col-action no-print';
+            actionTd.appendChild(makeButton('保存', 'btn-save', '保存该同学的信息', function () {
+              saveEdit(student.sid);
+            }));
+            actionTd.appendChild(makeButton('取消', 'btn-cancel', '放弃修改', cancelEdit));
+
+            tr.appendChild(nameTd);
+            tr.appendChild(sidTd);
+            tr.appendChild(contactTd);
+            tr.appendChild(actionTd);
+
+            // 键盘操作：回车 = 保存，Esc = 取消
+            tr.addEventListener('keydown', function (event) {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                saveEdit(student.sid);
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelEdit();
+              }
+            });
+          } else {
+            /* ===== 普通状态：只读展示 + 一个「编辑」按钮 ===== */
+
+            tr.appendChild(makeTextCell(student.name));
+            tr.appendChild(makeTextCell(student.sid));
+            tr.appendChild(makeTextCell(formatContact(student.contact)));
+
             var td = document.createElement('td');
-            td.textContent = text;
+            td.className = 'col-action no-print';
+            td.appendChild(makeButton('编辑', 'btn-edit', '修改 ' + student.name + ' 的信息', function () {
+              startEdit(student.sid);
+            }));
+
             tr.appendChild(td);
-          });
+          }
 
           tbody.appendChild(tr);
         });
@@ -180,10 +635,10 @@
         if (shown === 0) {
           var tr = document.createElement('tr');
           var td = document.createElement('td');
-          td.colSpan = 4;
+          td.colSpan = 5;            // 一共五列，让提示文字横跨整行
           td.className = 'empty-tip';
           td.textContent = all.length === 0
-            ? '名单还没有数据，请到「信息录入」页添加第一位同学。'
+            ? '这个班还没有名单数据，请到「信息录入」页添加第一位同学。'
             : '没有匹配的同学，换个关键词试试。';
           tr.appendChild(td);
           tbody.appendChild(tr);
@@ -191,13 +646,24 @@
 
         // 底部统计文字
         countEl.textContent = kw
-          ? '筛选出 ' + shown + ' 名同学（共 ' + all.length + ' 名）'
-          : '共 ' + all.length + ' 名同学 · 数据保存在本机浏览器';
+          ? '筛选出 ' + shown + ' 名同学（本班共 ' + all.length + ' 名）'
+          : '本班共 ' + all.length + ' 名同学 · 数据保存在本机浏览器，点右侧「编辑」可修改';
       }
 
       // 输入即筛选（不需要按回车）
       searchBox.addEventListener('input', function () {
         render(this.value);
+      });
+
+      /*
+        还没保存就关掉页面 / 跳走时提醒一下，免得白改一场。
+        只在编辑状态下生效，正常浏览不受影响。
+      */
+      window.addEventListener('beforeunload', function (event) {
+        if (editingSid !== null) {
+          event.preventDefault();
+          event.returnValue = '';   // 部分浏览器需要设置它才会弹出确认框
+        }
       });
 
       render('');   // 首次渲染完整名单

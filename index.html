@@ -2,7 +2,15 @@
 <!--
   ============================================================
   页面一：首页（index.html）
-  作用：介绍本项目、介绍班级，并提供通往其他两个页面的导航。
+  作用：作为整个平台的入口 —— 选择「专业 + 班级」，跳转到该班级页面。
+
+  首页包含四块：
+    ① 选择班级 —— 专业下拉 + 班级下拉 + 进入按钮
+    ② 班级概览 —— 每个班级一张卡片，显示人数，点卡片直接进班
+    ③ 新建班级 —— 预置班级之外，可以自己加一个班级
+    ④ 项目介绍 —— 说明这个平台是做什么的
+
+  班级目录与同学名单都来自 app.js（数据层），本页不写死任何数据。
   ============================================================
 -->
 <html lang="zh-CN">
@@ -11,24 +19,28 @@
   <!-- 移动端适配：让页面在手机上按设备宽度渲染 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- 页面描述：分享链接或搜索结果里会用到 -->
-  <meta name="description" content="面向班级负责人的轻量班级信息台：在线查看名单、录入同学信息，纯静态无需服务器。">
+  <meta name="description" content="班级信息录入平台：按学校、专业、班级查看同学名单，纯静态页面，打开即用。">
   <!-- 浏览器标签页图标 -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <title>首页 - 班级信息台</title>
+  <title>首页 - 班级信息平台</title>
   <!-- 引入公共样式表 -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ========== 顶部导航栏（三个页面通用） ========== -->
+  <!-- ========== 顶部导航栏 ========== -->
   <header class="site-header">
     <div class="container header-inner">
-      <!-- 站点 Logo，点击回到首页 -->
-      <a class="logo" href="index.html">🧩 计科 2026 班级信息台</a>
+      <!-- 站点 Logo，点击回到首页。「学校名」由脚本填入，见页面底部 -->
+      <a class="logo" href="index.html">🧩 <span class="school-name"></span> 班级信息平台</a>
       <nav class="nav">
         <a href="index.html" class="active">首页</a>
-        <a href="roster.html">班级名单</a>
-        <a href="form.html">信息录入</a>
+        <!--
+          名单页和录入页都要求「先有班级」才能打开，
+          所以这两个链接的目标由脚本动态指向当前选中的班级。
+        -->
+        <a href="roster.html" id="navRoster">班级名单</a>
+        <a href="form.html" id="navForm">信息录入</a>
       </nav>
     </div>
   </header>
@@ -38,70 +50,382 @@
 
     <!-- 首屏欢迎区 -->
     <section class="hero">
-      <h1>班级信息静态网页系统</h1>
-      <p class="subtitle">面向班级负责人的轻量工具 · 纯静态 · 打开即用</p>
+      <h1><span class="school-name"></span> 班级信息平台</h1>
+      <p class="subtitle">按专业与班级查看同学名单 · 纯静态 · 打开即用</p>
     </section>
 
-    <!-- 模块一：项目介绍 -->
+    <!-- ---------- 模块一：选择班级 ---------- -->
+    <section class="card">
+      <h2>选择班级</h2>
+      <p>先选专业，再选班级，然后点「进入班级」查看该班的同学名单。</p>
+
+      <!-- 两个下拉框并排；窄屏时自动变成上下排列（见 style.css 的 .picker） -->
+      <div class="picker">
+        <div class="form-item">
+          <label for="majorSelect">专业</label>
+          <!-- 选项由脚本根据班级目录生成 -->
+          <select id="majorSelect" class="input"></select>
+        </div>
+
+        <div class="form-item">
+          <label for="classSelect">班级</label>
+          <!-- 选项会随「专业」的选择联动变化 -->
+          <select id="classSelect" class="input"></select>
+        </div>
+      </div>
+
+      <div class="picker-actions">
+        <button type="button" id="goRoster" class="btn-submit">进入班级</button>
+        <button type="button" id="goForm" class="btn-secondary">直接录入</button>
+      </div>
+
+      <!-- 显示当前选中班级的全名，以及该班人数 -->
+      <p class="form-hint" id="pickerHint"></p>
+    </section>
+
+    <!-- ---------- 模块二：班级概览 ---------- -->
+    <section class="card">
+      <h2>班级概览</h2>
+      <p>下面是全部班级，点任意一张卡片即可进入该班名单。</p>
+      <!-- 卡片由脚本生成，每张卡片显示班级名与当前人数 -->
+      <div class="link-grid" id="overview"></div>
+    </section>
+
+    <!-- ---------- 模块三：新建班级 ---------- -->
+    <section class="card">
+      <h2>新建班级</h2>
+      <p>
+        除了上面已经有的班级，你也可以自己添加新班级。
+        <strong>新建的班级只保存在这台电脑的浏览器里</strong>，不会写进代码文件，
+        也不会同步给别人。
+      </p>
+
+      <!-- 创建结果提示条：默认隐藏，由脚本控制显示 -->
+      <div class="msg" id="classMsg" role="status" aria-live="polite"></div>
+
+      <form id="classForm" action="#">
+        <!-- 字段一：专业 -->
+        <div class="form-item">
+          <label for="newMajor">专业 <span class="required">*</span></label>
+          <input
+            type="text"
+            id="newMajor"
+            class="input"
+            list="majorOptions"
+            placeholder="例如：数据科学与大数据技术"
+            maxlength="30"
+            required>
+          <!-- 已有专业作为输入建议：可以直接选，也可以填一个新的 -->
+          <datalist id="majorOptions"></datalist>
+          <p class="form-hint">可以直接选已有专业，也可以输入一个新的专业名</p>
+        </div>
+
+        <!-- 字段二：年级 -->
+        <div class="form-item">
+          <label for="newGrade">年级 <span class="required">*</span></label>
+          <input
+            type="text"
+            id="newGrade"
+            class="input"
+            value="2026"
+            maxlength="4"
+            inputmode="numeric"
+            placeholder="例如：2026"
+            required>
+          <p class="form-hint">入学年份，4 位数字</p>
+        </div>
+
+        <!-- 字段三：班级名 -->
+        <div class="form-item">
+          <label for="newName">班级名 <span class="required">*</span></label>
+          <input
+            type="text"
+            id="newName"
+            class="input"
+            placeholder="例如：3 班"
+            maxlength="20"
+            required>
+          <p class="form-hint">例如「1 班」「2 班」，与专业、年级一起构成班级全名</p>
+        </div>
+
+        <button type="submit" class="btn-submit">创建班级</button>
+      </form>
+    </section>
+
+    <!-- ---------- 模块四：项目介绍 ---------- -->
     <section class="card">
       <h2>项目介绍</h2>
       <p>
-        本项目是一个用原生 HTML 搭建的班级信息管理页面集合，为班级负责人日常事务服务。
-        不需要服务器、不需要数据库，用浏览器直接打开 <code>index.html</code> 就能使用，
-        也可以整体拷贝到 U 盘或上传到任意静态托管平台。
-      </p>
-      <p>系统包含三个页面：</p>
-      <p>
-        ① <strong>首页</strong>——介绍项目与班级，提供功能入口；<br>
-        ② <strong>班级名单</strong>——用表格展示全班同学的姓名、学号与联系方式，支持搜索；<br>
-        ③ <strong>信息录入</strong>——填写姓名、学号和手机号并提交，数据会保存到本机浏览器。
-      </p>
-    </section>
-
-    <!-- 模块二：班级简介 -->
-    <section class="card">
-      <h2>班级简介</h2>
-      <p>
-        我们是<strong>某高校 计算机类专业 2026 级</strong>的学生。
-        班级现有同学 <span id="stuCount">12</span> 人，日常事务包括名单统计、信息收集、通知传达与活动组织。
+        本平台用原生 HTML、CSS 和 JavaScript 搭建，不依赖任何框架、服务器或数据库，
+        用浏览器直接打开就能使用，也可以整体拷到 U 盘或传到任意静态托管平台。
       </p>
       <p>
-        班级信息台的目标很朴素：把「查名单」和「收信息」这两件高频小事，
-        做成一个不用登录、不用联网也能查的干净页面。
+        目前共有 <strong><span id="statClasses">—</span></strong> 个班级、
+        <strong><span id="statStudents">—</span></strong> 名同学。
+        每个班级都有自己的网址，可以直接分享或收藏，例如
+        <code>roster.html?c=cs-2026-1</code>。
       </p>
-    </section>
-
-    <!-- 模块三：导航入口，卡片式跳转链接 -->
-    <section class="card">
-      <h2>快速导航</h2>
-      <div class="link-grid">
-        <!-- 点击整块卡片即可跳转，提升可点击面积 -->
-        <a class="link-box" href="roster.html">
-          <strong>📋 班级名单 →</strong>
-          <span>查看全班同学的姓名、学号与联系方式</span>
-        </a>
-        <a class="link-box" href="form.html">
-          <strong>✍️ 信息录入 →</strong>
-          <span>填写姓名、学号和手机号，提交录入</span>
-        </a>
-      </div>
+      <p>
+        <strong>提示：</strong>名单数据保存在浏览器本地（localStorage），
+        换一台电脑、换一个浏览器，或清理浏览器数据后，会回到默认示例名单。
+      </p>
     </section>
 
   </main>
 
   <!-- ========== 页脚 ========== -->
   <footer class="site-footer">
-    <p>班级信息静态网页系统 &copy; 2026 · 计算机类专业 2026 级</p>
+    <p>班级信息平台 &copy; 2026 · <span class="school-name"></span></p>
   </footer>
 
-  <!-- 数据层：首页只用到它来取当前人数 -->
+  <!-- 数据层：提供班级目录与名单数据 -->
   <script src="app.js"></script>
   <script>
     /*
-      首页只做一件事：把班级简介里的「现有同学 N 人」显示成实际人数。
-      这样在录入页加了同学之后，首页的人数不会对不上。
+      首页脚本，做四件事：
+        1. 把页面上所有「学校名」的位置填上（数据层里的 SCHOOL）
+        2. 生成「专业」下拉框，以及随专业联动的「班级」下拉框
+        3. 生成「班级概览」卡片（带各班人数）
+        4. 处理「新建班级」表单
+
+      注意：所有动态内容都用 textContent 写入，不用 innerHTML 拼接，
+           避免用户输入的内容被当成 HTML 执行（XSS）。
     */
-    document.getElementById('stuCount').textContent = ClassData.load().length;
+    (function () {
+      var majorSelect = document.getElementById('majorSelect');
+      var classSelect = document.getElementById('classSelect');
+      var pickerHint = document.getElementById('pickerHint');
+      var overview = document.getElementById('overview');
+      var navRoster = document.getElementById('navRoster');
+      var navForm = document.getElementById('navForm');
+      var classForm = document.getElementById('classForm');
+      var classMsg = document.getElementById('classMsg');
+
+      var statClasses = document.getElementById('statClasses');
+      var statStudents = document.getElementById('statStudents');
+
+      /* ---------- 工具：提示条 ---------- */
+      function showMsg(el, text, isError) {
+        el.className = isError ? 'msg msg-error' : 'msg';
+        el.textContent = text;
+        el.style.display = 'block';
+      }
+
+      /* ---------- 0. 填充页面上的学校名 ---------- */
+      var schoolEls = document.querySelectorAll('.school-name');
+      for (var i = 0; i < schoolEls.length; i++) {
+        schoolEls[i].textContent = ClassData.SCHOOL;
+      }
+
+      /* ---------- 1. 生成「专业」下拉框 ---------- */
+      function renderMajors(selected) {
+        var majors = ClassData.listMajors();
+
+        majorSelect.textContent = '';   // 清空后重建，避免重复
+        majors.forEach(function (major) {
+          var option = document.createElement('option');
+          option.value = major;
+          option.textContent = major;
+          majorSelect.appendChild(option);
+        });
+
+        // 尽量保留原来选中的专业；没有就选第一个
+        majorSelect.value = (selected && majors.indexOf(selected) > -1) ? selected : (majors[0] || '');
+      }
+
+      /* ---------- 2. 生成「班级」下拉框（随专业联动） ---------- */
+      function renderClasses(major, selected) {
+        var classes = ClassData.listClassesByMajor(major);
+
+        classSelect.textContent = '';   // 清空后重建
+
+        if (classes.length === 0) {
+          var empty = document.createElement('option');
+          empty.value = '';
+          empty.textContent = '（该专业暂无班级）';
+          classSelect.appendChild(empty);
+          classSelect.disabled = true;
+          return;
+        }
+
+        classSelect.disabled = false;
+        classes.forEach(function (cls) {
+          var option = document.createElement('option');
+          option.value = cls.id;
+          // 下拉里只显示班级名（专业已经在左边选好了），但把年级带上以免混淆
+          option.textContent = cls.grade + ' 级 ' + cls.name;
+          classSelect.appendChild(option);
+        });
+
+        // 尽量保留原来选中的班级；该专业里没有就选第一个
+        var ids = classes.map(function (c) { return c.id; });
+        classSelect.value = (selected && ids.indexOf(selected) > -1) ? selected : classes[0].id;
+      }
+
+      /* ---------- 3. 同步「当前选中班级」带出的各种显示 ---------- */
+
+      /*
+        当前选中的班级 id。
+        班级下拉被禁用（该专业没有班级）时返回空字符串。
+      */
+      function currentClassId() {
+        return classSelect.disabled ? '' : classSelect.value;
+      }
+
+      /* 顶部导航里的「班级名单」「信息录入」要指向当前选中的班级 */
+      function syncNav() {
+        var cid = currentClassId();
+        navRoster.href = ClassData.buildUrl('roster.html', cid);
+        navForm.href = ClassData.buildUrl('form.html', cid);
+      }
+
+      /* 选中班级下方的那行小字：班级全名 + 人数 */
+      function syncHint() {
+        var cls = ClassData.getClass(currentClassId());
+
+        if (!cls) {
+          pickerHint.textContent = '该专业下还没有班级，可以在下面「新建班级」里添加一个。';
+          return;
+        }
+
+        pickerHint.textContent = '当前选中：' + ClassData.getClassName(cls)
+          + ' · 已有 ' + ClassData.load(cls.id).length + ' 名同学';
+      }
+
+      /* ---------- 4. 生成「班级概览」卡片 ---------- */
+      function renderOverview() {
+        var classes = ClassData.listClasses();
+
+        overview.textContent = '';
+
+        if (classes.length === 0) {
+          var tip = document.createElement('p');
+          tip.className = 'empty-tip';
+          tip.textContent = '还没有任何班级，请先在下面创建一个。';
+          overview.appendChild(tip);
+          return;
+        }
+
+        classes.forEach(function (cls) {
+          var link = document.createElement('a');
+          link.className = 'link-box';
+          link.href = ClassData.buildUrl('roster.html', cls.id);
+
+          var title = document.createElement('strong');
+          title.textContent = '📋 ' + ClassData.getClassName(cls);
+
+          var desc = document.createElement('span');
+          desc.textContent = '共 ' + ClassData.load(cls.id).length + ' 名同学 · 点此查看名单';
+
+          link.appendChild(title);
+          link.appendChild(desc);
+          overview.appendChild(link);
+        });
+      }
+
+      /* ---------- 5. 底部统计文字 ---------- */
+      function renderStats() {
+        var classes = ClassData.listClasses();
+        var total = 0;
+
+        classes.forEach(function (cls) {
+          total += ClassData.load(cls.id).length;
+        });
+
+        statClasses.textContent = classes.length;
+        statStudents.textContent = total;
+      }
+
+      /* ---------- 6. 一次性刷新所有动态内容 ---------- */
+      function refreshAll(major, classId) {
+        renderMajors(major);
+        renderClasses(majorSelect.value, classId);
+        syncNav();
+        syncHint();
+        renderOverview();
+        renderStats();
+        renderMajorOptions();
+      }
+
+      /* ---------- 7. 新建班级表单里的「已有专业」建议 ---------- */
+      function renderMajorOptions() {
+        var datalist = document.getElementById('majorOptions');
+        datalist.textContent = '';
+
+        ClassData.listMajors().forEach(function (major) {
+          var option = document.createElement('option');
+          option.value = major;
+          datalist.appendChild(option);
+        });
+      }
+
+      /* ---------- 8. 事件绑定 ---------- */
+
+      // 切换专业 → 班级下拉跟着换，并选第一个
+      majorSelect.addEventListener('change', function () {
+        renderClasses(this.value, '');
+        syncNav();
+        syncHint();
+      });
+
+      // 切换班级 → 更新导航链接与提示文字
+      classSelect.addEventListener('change', function () {
+        syncNav();
+        syncHint();
+      });
+
+      // 「进入班级」→ 跳转到该班名单页
+      document.getElementById('goRoster').addEventListener('click', function () {
+        var cid = currentClassId();
+        if (!cid) {
+          showMsg(classMsg, '该专业下还没有班级，请先新建一个。', true);
+          return;
+        }
+        window.location.href = ClassData.buildUrl('roster.html', cid);
+      });
+
+      // 「直接录入」→ 跳转到该班录入页
+      document.getElementById('goForm').addEventListener('click', function () {
+        var cid = currentClassId();
+        if (!cid) {
+          showMsg(classMsg, '该专业下还没有班级，请先新建一个。', true);
+          return;
+        }
+        window.location.href = ClassData.buildUrl('form.html', cid);
+      });
+
+      // 提交「新建班级」表单
+      classForm.addEventListener('submit', function (event) {
+        event.preventDefault();   // 阻止默认提交，否则页面会刷新
+
+        var major = document.getElementById('newMajor').value.trim();
+        var grade = document.getElementById('newGrade').value.trim();
+        var name = document.getElementById('newName').value.trim();
+
+        var result = ClassData.createClass({ major: major, grade: grade, name: name });
+
+        if (!result.ok) {
+          var reasons = {
+            invalid: '请把专业、年级和班级名都填上。',
+            duplicate: '这个班级已经存在了（' + major + ' ' + grade + ' 级 ' + name + '），不用重复创建。',
+            storage: '创建失败，请检查浏览器是否禁用了本地存储（隐私模式下无法保存）。'
+          };
+          showMsg(classMsg, reasons[result.reason] || '创建失败。', true);
+          return;
+        }
+
+        // 创建成功：清空表单 → 重建下拉（并自动选中新班级）→ 刷新概览与统计
+        classForm.reset();
+        document.getElementById('newGrade').value = '2026';
+
+        refreshAll(result.cls.major, result.cls.id);
+
+        showMsg(classMsg, '已创建：' + ClassData.getClassName(result.cls) + '。现在可以直接进入这个班级了。', false);
+      });
+
+      /* ---------- 9. 首次渲染 ---------- */
+      refreshAll('', '');
+    })();
   </script>
 
 </body>

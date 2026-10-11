@@ -2,7 +2,16 @@
 <!--
   ============================================================
   页面三：信息收集表单（form.html）
-  作用：录入姓名、学号与手机号，点击提交按钮。
+  作用：录入同学信息 —— 填写姓名、学号、手机号，并指定这位同学属于哪个班级。
+
+  本页的「当前班级」有两个来源，页面上随时可以改：
+    ① 网址参数 c，例如 form.html?c=cs-2026-1
+       表示进页面时默认选中「计算机科学与技术 2026 级 1 班」；
+    ② 页面顶部「这条信息录入到哪个班？」里的两个下拉框（专业 → 班级），
+       选什么就录进哪个班，地址栏会跟着自动更新（刷新、收藏都不丢）。
+
+  没带 c 参数时（例如直接打开 form.html）本页不再拦人：
+  默认选中班级目录里的第一个班级，并在提示条里说明一句。
 
   数据去向：提交后由 app.js 保存进浏览器本地（localStorage），
             刷新或关闭页面都不会丢，「班级名单」页会立刻显示出来。
@@ -16,22 +25,22 @@
   <meta charset="UTF-8">
   <!-- 移动端适配：让页面在手机上按设备宽度渲染 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="班级同学信息录入表单，填写姓名、学号与手机号后提交，数据保存在本机浏览器。">
+  <meta name="description" content="班级同学信息录入表单，选择专业与班级后填写姓名、学号、手机号并提交，数据保存在本机浏览器。">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <title>信息录入 - 班级信息台</title>
+  <title>信息录入 - 班级信息平台</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ========== 顶部导航栏（三个页面通用） ========== -->
+  <!-- ========== 顶部导航栏 ========== -->
   <header class="site-header">
     <div class="container header-inner">
-      <a class="logo" href="index.html">🧩 计科 2026 班级信息台</a>
+      <a class="logo" href="index.html">🧩 <span class="school-name"></span> 班级信息平台</a>
       <nav class="nav">
         <a href="index.html">首页</a>
-        <a href="roster.html">班级名单</a>
-        <!-- 当前页面高亮：给 a 标签加 active 类 -->
-        <a href="form.html" class="active">信息录入</a>
+        <!-- 这两个链接由脚本补上当前班级参数 -->
+        <a href="roster.html" id="navRoster">班级名单</a>
+        <a href="form.html" id="navForm" class="active">信息录入</a>
       </nav>
     </div>
   </header>
@@ -39,22 +48,79 @@
   <!-- ========== 主体内容 ========== -->
   <main class="container">
 
-    <section class="card">
+    <!-- 面包屑：显示当前录进哪个班。打印时不显示 -->
+    <nav class="breadcrumb no-print" id="breadcrumb" aria-label="当前位置" hidden>
+      <a href="index.html">首页</a>
+      <span class="crumb-sep">›</span>
+      <span id="crumbMajor"></span>
+      <span class="crumb-sep">›</span>
+      <span class="crumb-current" id="crumbClass"></span>
+    </nav>
+
+    <!--
+      情况一：班级目录里一个班级都没有（正常不会出现，属于兜底）
+      这时无处可录，只能引导回首页新建一个班级。
+    -->
+    <section class="card" id="noticeCard" hidden>
+      <h2 id="noticeTitle">还没有任何班级</h2>
+      <p id="noticeText">
+        这个页面需要知道「往哪个班录入」，但目前一个班级都没有。
+        请回到首页，先新建一个班级，再回来录入。
+      </p>
+      <p class="notice-actions">
+        <a class="btn-submit btn-link" href="index.html">回到首页新建班级</a>
+      </p>
+    </section>
+
+    <!-- 情况二：正常录入 -->
+    <section class="card" id="formCard" hidden>
       <h2>信息录入</h2>
+
+      <!-- 当前正在录入的班级，由脚本跟随下拉框实时更新 -->
+      <p class="class-tag" id="classTag"></p>
+
+      <!--
+        录入到哪个班：专业 + 班级两个联动下拉框。
+        这一段刻意放在 <form> 外面，有两个好处：
+          ① 提交后清空表单（reset）时不会把班级选择也一起重置掉，
+             方便连续录入同一个班的多位同学；
+          ② 不参与表单的必填校验 —— 下拉框永远有值，本来就是选好才录的。
+      -->
+      <div class="class-picker">
+        <p class="picker-label">这条信息录入到哪个班？</p>
+
+        <div class="picker">
+          <div class="form-item">
+            <label for="majorSelect">专业</label>
+            <!-- 选项由脚本根据班级目录生成 -->
+            <select id="majorSelect" class="input"></select>
+          </div>
+          <div class="form-item">
+            <label for="classSelect">班级</label>
+            <!-- 选项会随「专业」的选择联动变化 -->
+            <select id="classSelect" class="input"></select>
+          </div>
+        </div>
+
+        <!-- 提示当前选中的班级已有多少人 -->
+        <p class="form-hint" id="pickerHint"></p>
+      </div>
+
       <p>请填写同学的基本信息后点击「提交」。带 <span class="required">*</span> 的为必填项。</p>
 
       <!--
-        提交结果提示条：默认隐藏（CSS 里 display:none），由脚本控制显示。
-        role="status" + aria-live 让屏幕阅读器也能读出提交结果。
+        提示条：显示「刚进页面时的班级说明」和「提交结果」。
+        role="status" + aria-live 让屏幕阅读器也能读出内容变化。
+        语气由脚本切换：msg（成功）/ msg-info（中性说明）/ msg-warn（警告）/ msg-error（错误）。
       -->
       <div class="msg" id="msg" role="status" aria-live="polite"></div>
 
       <!--
         表单：
         - action="#" 表示暂不提交到任何后端地址
-        - onsubmit 交给脚本处理，避免页面刷新
+        - 提交交给页面底部脚本处理，避免页面刷新
       -->
-      <form id="infoForm" action="#" onsubmit="handleSubmit(event)">
+      <form id="infoForm" action="#">
 
         <!-- 字段一：姓名 -->
         <div class="form-item">
@@ -66,6 +132,7 @@
             name="name"
             class="input"
             placeholder="请输入姓名，例如：张三"
+            maxlength="30"
             required>
           <p class="form-hint">与学籍一致的正式姓名</p>
         </div>
@@ -120,15 +187,21 @@
     </section>
 
     <!-- 提交说明 -->
-    <section class="card">
+    <section class="card" id="helpCard" hidden>
       <h2>说明</h2>
       <p>
-        提交后，信息会保存到<strong>你这台电脑的浏览器本地</strong>（localStorage），
-        刷新或关闭页面都不会丢失，并会立刻出现在「班级名单」页。
+        提交前先在上面的「专业 / 班级」里选好班级 ——
+        <strong>选哪个班，这条信息就录进哪个班</strong>；选完之后地址栏会自动带上班级编号，
+        刷新或收藏这个网址，下次进来还是这个班。
       </p>
       <p>
-        <strong>如果学号已经存在</strong>，页面会弹窗问你要不要用这次填写的信息覆盖原有记录 ——
+        提交后，信息会保存到<strong>你这台电脑的浏览器本地</strong>（localStorage），
+        刷新或关闭页面都不会丢失，并会立刻出现在这个班的「班级名单」页。
+      </p>
+      <p>
+        <strong>如果学号在本班已经存在</strong>，页面会弹窗问你要不要用这次填写的信息覆盖原有记录 ——
         之前漏填手机号的同学，用同样的学号重填一次就能补上。
+        （注意：学号查重只在<strong>本班范围</strong>内判断，不同班级可以有相同学号。）
       </p>
       <p>
         数据不会上传到任何服务器，所以换一台电脑、或换一个浏览器就看不到了。
@@ -137,87 +210,328 @@
       </p>
     </section>
 
+    <!-- 底部便捷入口 -->
+    <section class="card no-print" id="relatedCard" hidden>
+      <h2>相关操作</h2>
+      <div class="link-grid">
+        <a class="link-box" href="roster.html" id="linkRoster">
+          <strong>📋 查看这个班的名单 →</strong>
+          <span>看看已经录入了哪些同学</span>
+        </a>
+        <a class="link-box" href="index.html">
+          <strong>🏫 回首页 →</strong>
+          <span>新建班级，或查看全部班级概览</span>
+        </a>
+      </div>
+    </section>
+
   </main>
 
   <!-- ========== 页脚 ========== -->
   <footer class="site-footer">
-    <p>班级信息静态网页系统 &copy; 2026 · 计算机类专业 2026 级</p>
+    <p>班级信息平台 &copy; 2026 · <span class="school-name"></span></p>
   </footer>
 
-  <!-- 数据层：提供同学名单的读取与保存 -->
+  <!-- 数据层：提供班级目录与同学名单 -->
   <script src="app.js"></script>
   <script>
     /*
       录入页脚本，流程：
-        1. 阻止表单默认提交（否则页面会刷新）
-        2. 做一次兜底校验（浏览器 required / pattern 已经拦过一遍，这里是双保险）
-        3. 交给数据层保存
-           - 学号不存在 → 新增一位同学
-           - 学号已存在 → 弹窗确认，用户同意才覆盖（避免误改别人的信息）
-        4. 显示结果提示条；成功时清空输入框，方便连续录入下一位同学
+        1. 如果班级目录里一个班级都没有 → 只显示提示卡片，引导回首页（兜底）
+        2. 生成「专业」「班级」两个联动下拉框
+           - 网址带 ?c= 且班级有效 → 默认选中那个班
+           - 没带（或编号无效）→ 默认选中第一个班级，并在提示条里说明
+        3. 班级一变，就把「当前班级」同步到页面各处：
+           顶部标签、面包屑、页面标题、导航链接、底部名单入口、地址栏
+        4. 提交时读取「当前选中的班级」，把同学录进去
+           - 学号在本班不存在 → 新增一位同学
+           - 学号在本班已存在 → 弹窗确认，用户同意才覆盖（避免误改别人的信息）
+        5. 显示结果提示条；成功时清空输入框，方便连续录入下一位同学
+           （班级选择在 <form> 之外，不会被一起清掉）
     */
-    function handleSubmit(event) {
-      event.preventDefault();
+    (function () {
+      var msgEl = document.getElementById('msg');
+      var breadcrumb = document.getElementById('breadcrumb');
+      var crumbMajor = document.getElementById('crumbMajor');
+      var crumbClass = document.getElementById('crumbClass');
+      var noticeCard = document.getElementById('noticeCard');
+      var formCard = document.getElementById('formCard');
+      var helpCard = document.getElementById('helpCard');
+      var relatedCard = document.getElementById('relatedCard');
+      var classTag = document.getElementById('classTag');
+      var majorSelect = document.getElementById('majorSelect');
+      var classSelect = document.getElementById('classSelect');
+      var pickerHint = document.getElementById('pickerHint');
+      var navRoster = document.getElementById('navRoster');
+      var navForm = document.getElementById('navForm');
+      var linkRoster = document.getElementById('linkRoster');
+      var infoForm = document.getElementById('infoForm');
 
-      var name = document.getElementById('name').value.trim();
-      var stuId = document.getElementById('stuId').value.trim();
-      var contact = document.getElementById('contact').value.trim();
-      var msg = document.getElementById('msg');
+      /* ---------- 0. 公共小工具 ---------- */
 
-      if (!name || !stuId || !contact) {
-        alert('请填写完整的姓名、学号和手机号');
+      // 填充页面上所有「学校名」的位置
+      var schoolEls = document.querySelectorAll('.school-name');
+      for (var s = 0; s < schoolEls.length; s++) {
+        schoolEls[s].textContent = ClassData.SCHOOL;
+      }
+
+      /*
+        显示提示条。kind 取 'info'（中性说明）/ 'warn'（警告）/ 'error'（错误），
+        不传则按「成功」处理（绿色）。
+      */
+      function showMsg(text, kind) {
+        msgEl.className = kind ? 'msg msg-' + kind : 'msg';
+        msgEl.textContent = text;
+        msgEl.style.display = 'block';
+      }
+
+      /*
+        把地址栏同步成当前选中的班级。
+        这样刷新页面、收藏网址、把网址发给同学，都能回到同一个班。
+      */
+      function syncUrl(classId) {
+        try {
+          window.history.replaceState(null, '', ClassData.buildUrl('form.html', classId));
+        } catch (e) {
+          // 个别环境（例如直接用 file:// 打开、或浏览器限制）不允许改地址栏，
+          // 忽略即可 —— 页面功能不依赖它
+        }
+      }
+
+      /* ---------- 1. 一个班级都没有：只显示提示卡片，后面的事都不用做了 ---------- */
+      if (ClassData.listClasses().length === 0) {
+        noticeCard.hidden = false;
+        breadcrumb.hidden = true;
+        formCard.hidden = true;
+        helpCard.hidden = true;
+        relatedCard.hidden = true;
+
+        navRoster.href = 'index.html';
+        navForm.href = 'index.html';
         return;
       }
 
-      var result = ClassData.add({ name: name, sid: stuId, contact: contact });
+      /* ---------- 2. 有班级可录：把三张卡片放出来 ---------- */
+      formCard.hidden = false;
+      helpCard.hidden = false;
+      relatedCard.hidden = false;
 
-      // 情况一：学号已存在 —— 问一句要不要覆盖，避免手滑改掉别人的信息
-      if (!result.ok && result.reason === 'duplicate') {
-        var exist = ClassData.find(stuId);
-        var existName = exist ? exist.name : '已有同学';
-        var existContact = exist && exist.contact ? exist.contact : '未填写';
+      /* ---------- 3. 生成两个下拉框 ---------- */
 
-        var yes = window.confirm(
-          '学号 ' + stuId + ' 已经存在（' + existName + '，手机号：' + existContact + '）。\n\n' +
-          '要用这次填写的信息覆盖原来的记录吗？'
-        );
+      /* 「专业」下拉框：列出班级目录里出现过的全部专业 */
+      function renderMajors(selected) {
+        var majors = ClassData.listMajors();
 
-        if (yes) {
-          var updated = ClassData.update(stuId, { name: name, sid: stuId, contact: contact });
+        majorSelect.textContent = '';   // 清空后重建，避免重复
+        majors.forEach(function (major) {
+          var option = document.createElement('option');
+          option.value = major;
+          option.textContent = major;
+          majorSelect.appendChild(option);
+        });
 
-          if (updated.ok) {
-            msg.className = 'msg';
-            msg.textContent = '已更新：' + name + '（学号 ' + stuId + '）的手机号为 ' + contact + '。';
-            document.getElementById('infoForm').reset();
-          } else {
-            msg.className = 'msg msg-error';
-            msg.textContent = '保存失败，请检查浏览器是否禁用了本地存储。';
-          }
-        } else {
-          msg.className = 'msg msg-error';
-          msg.textContent = '已取消，' + existName + '的原有信息保持不变。';
+        // 尽量保留原来选中的专业；没有就选第一个
+        majorSelect.value = (selected && majors.indexOf(selected) > -1) ? selected : (majors[0] || '');
+      }
+
+      /* 「班级」下拉框：只列出当前专业下的班级，随专业联动 */
+      function renderClasses(major, selected) {
+        var classes = ClassData.listClassesByMajor(major);
+
+        classSelect.textContent = '';   // 清空后重建
+
+        if (classes.length === 0) {
+          var empty = document.createElement('option');
+          empty.value = '';
+          empty.textContent = '（该专业暂无班级）';
+          classSelect.appendChild(empty);
+          classSelect.disabled = true;
+          return;
         }
 
-        msg.style.display = 'block';
-        return;
+        classSelect.disabled = false;
+        classes.forEach(function (cls) {
+          var option = document.createElement('option');
+          option.value = cls.id;
+          // 下拉里只显示「年级 + 班名」（专业已经在左边选好了）
+          option.textContent = cls.grade + ' 级 ' + cls.name;
+          classSelect.appendChild(option);
+        });
+
+        // 尽量保留原来选中的班级；当前专业里没有这个班就退而选第一个
+        var ids = classes.map(function (c) { return c.id; });
+        classSelect.value = (selected && ids.indexOf(selected) > -1) ? selected : classes[0].id;
       }
 
-      // 情况二：写入本地存储失败（隐私模式等）
-      if (!result.ok) {
-        msg.className = 'msg msg-error';
-        msg.textContent = '保存失败，请检查浏览器是否禁用了本地存储。';
-        msg.style.display = 'block';
-        return;
+      /* ---------- 4. 当前选中的班级 id（下拉框被禁用时视为空） ---------- */
+      function currentClassId() {
+        return classSelect.disabled ? '' : classSelect.value;
       }
 
-      // 情况三：新增成功
-      msg.className = 'msg';
-      msg.textContent = '已录入：' + name + '（学号 ' + stuId + '，手机号 ' + contact + '），当前共 '
-        + result.count + ' 名同学。数据保存在本机浏览器。';
-      // 清空表单，方便继续录入下一位
-      document.getElementById('infoForm').reset();
-      msg.style.display = 'block';
-    }
+      /* ---------- 5. 把「当前班级」同步到页面各处 ---------- */
+      function syncContext() {
+        var classId = currentClassId();
+        var cls = ClassData.getClass(classId);
+
+        // 理论上不会发生（没有班级时第 1 步就已经返回了），留个保险
+        if (!cls) {
+          classTag.textContent = '暂时没有可录入的班级';
+          pickerHint.textContent = '这个专业下还没有班级，请回首页新建一个。';
+          breadcrumb.hidden = true;
+          navRoster.href = 'index.html';
+          navForm.href = 'index.html';
+          linkRoster.href = 'index.html';
+          return;
+        }
+
+        var className = ClassData.getClassName(cls);
+
+        // 顶部标签与浏览器标签页标题
+        classTag.textContent = '正在录入：' + className;
+        document.title = '信息录入 · ' + className + ' - 班级信息平台';
+
+        // 面包屑：首页 › 专业 › 年级 班级
+        crumbMajor.textContent = cls.major;
+        crumbClass.textContent = cls.grade + ' 级 ' + cls.name;
+        breadcrumb.hidden = false;
+
+        // 下拉框下方的说明：这个班现在有多少人
+        pickerHint.textContent = '该班已有 ' + ClassData.load(classId).length
+          + ' 名同学，录入后可在「班级名单」页查看或修改。';
+
+        // 导航与底部入口都指向当前这个班
+        navRoster.href = ClassData.buildUrl('roster.html', classId);
+        navForm.href = ClassData.buildUrl('form.html', classId);
+        linkRoster.href = ClassData.buildUrl('roster.html', classId);
+
+        // 地址栏跟上，方便刷新与分享
+        syncUrl(classId);
+      }
+
+      /* ---------- 6. 首次渲染：按网址参数定默认班级 ---------- */
+
+      var urlRaw = ClassData.param('c');        // 网址里写的班级编号（可能是空的）
+      var urlCls = ClassData.getClass(urlRaw);  // 编号有效时拿到班级对象，否则 null
+      var arrivalNote = null;                   // 进页面时要说明的一句话
+
+      if (urlRaw && !urlCls) {
+        // 带了编号但这个班不存在（链接过期、班级被移除等）
+        arrivalNote = '网址里的班级编号「' + urlRaw
+          + '」在班级目录里不存在，已默认选中第一个班级，你可以在上面改成别的班。';
+      } else if (!urlRaw) {
+        // 压根没带编号（例如直接打开 form.html）—— 班级名要等选完才知道，先占位
+        arrivalNote = '网址里没有指定班级，已默认选中第一个班级，你可以在上面改成别的班。';
+      }
+
+      renderMajors(urlCls ? urlCls.major : '');
+      renderClasses(majorSelect.value, urlCls ? urlCls.id : '');
+      syncContext();
+
+      if (arrivalNote) {
+        if (!urlRaw) {
+          // 补上具体班级名，说明更清楚
+          arrivalNote = '网址里没有指定班级，已默认选中「'
+            + ClassData.getClassName(ClassData.getClass(currentClassId()))
+            + '」，你可以在上面改成别的班。';
+        }
+        showMsg(arrivalNote, urlRaw ? 'warn' : 'info');
+      }
+
+      // 进页面时的这句说明，等用户一动手改班级就撤掉（已经过时了）
+      var arrivalNoteShown = !!arrivalNote;
+
+      function clearArrivalNote() {
+        if (!arrivalNoteShown) return;
+        arrivalNoteShown = false;
+        msgEl.style.display = 'none';
+        msgEl.textContent = '';
+        msgEl.className = 'msg';
+      }
+
+      /* ---------- 7. 切换班级 ---------- */
+
+      // 换专业 → 班级下拉跟着换，并选该专业下的第一个班
+      majorSelect.addEventListener('change', function () {
+        renderClasses(majorSelect.value, '');
+        syncContext();
+        clearArrivalNote();
+      });
+
+      // 换班级 → 更新页面各处
+      classSelect.addEventListener('change', function () {
+        syncContext();
+        clearArrivalNote();
+      });
+
+      /* ---------- 8. 提交处理 ---------- */
+      infoForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        // 录进「当前选中的班」，而不是网址里写的那个 —— 页面上选什么就以什么为准
+        var classId = currentClassId();
+        var cls = ClassData.getClass(classId);
+
+        if (!cls) {
+          showMsg('请先在「这条信息录入到哪个班？」里选好专业和班级。', 'error');
+          return;
+        }
+
+        var className = ClassData.getClassName(cls);
+        var name = document.getElementById('name').value.trim();
+        var stuId = document.getElementById('stuId').value.trim();
+        var contact = document.getElementById('contact').value.trim();
+
+        if (!name || !stuId || !contact) {
+          alert('请填写完整的姓名、学号和手机号');
+          return;
+        }
+
+        // 往「当前班级」里加人
+        var result = ClassData.add(classId, { name: name, sid: stuId, contact: contact });
+
+        // 情况一：学号在本班已存在 —— 问一句要不要覆盖，避免手滑改掉别人的信息
+        if (!result.ok && result.reason === 'duplicate') {
+          var exist = ClassData.find(classId, stuId);
+          var existName = exist ? exist.name : '已有同学';
+          var existContact = exist && exist.contact ? exist.contact : '未填写';
+
+          var yes = window.confirm(
+            '在本班（' + className + '）里，学号 ' + stuId + ' 已经存在（' + existName
+            + '，手机号：' + existContact + '）。\n\n'
+            + '要用这次填写的信息覆盖原来的记录吗？'
+          );
+
+          if (yes) {
+            var updated = ClassData.update(classId, stuId, { name: name, sid: stuId, contact: contact });
+
+            if (updated.ok) {
+              showMsg('已更新：' + name + '（学号 ' + stuId + '）的手机号为 ' + contact + '。');
+              infoForm.reset();
+              syncContext();   // 人数可能没变，但顺手刷新一下说明
+            } else {
+              showMsg('保存失败，请检查浏览器是否禁用了本地存储。', 'error');
+            }
+          } else {
+            showMsg('已取消，' + existName + '的原有信息保持不变。', 'error');
+          }
+
+          return;
+        }
+
+        // 情况二：写入本地存储失败（隐私模式等）
+        if (!result.ok) {
+          showMsg('保存失败，请检查浏览器是否禁用了本地存储。', 'error');
+          return;
+        }
+
+        // 情况三：新增成功
+        showMsg('已录入到「' + className + '」：' + name + '（学号 ' + stuId
+          + '，手机号 ' + contact + '），本班现有 ' + result.count + ' 名同学。');
+        // 清空三个输入框，方便继续录入下一位（班级选择在表单之外，不受影响）
+        infoForm.reset();
+        syncContext();   // 刷新「该班已有 N 名同学」
+      });
+    })();
   </script>
 
 </body>

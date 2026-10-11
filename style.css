@@ -13,6 +13,7 @@
   --primary-soft: #eef3ff;   /* 主色浅底：导航 hover、表头背景 */
   --primary-faint: #f8faff;  /* 主色极浅底：表格行 hover */
   --primary-glow: rgba(47, 111, 237, .12);   /* 主色光晕：聚焦光圈、卡片阴影 */
+  --primary-border: #c9d9fb; /* 主色系描边：中性提示条的边框 */
   --on-primary: #ffffff;     /* 压在主色底上的文字色（按钮、当前页标签） */
 
   /* 中性色系 */
@@ -26,6 +27,11 @@
   --success-bg: #eaf7ee;
   --success-border: #b7e4c7;
   --success-text: #1b7a3d;
+
+  /* 警告状态（橙）：不是错误，但需要留意一下的提示 */
+  --warn-bg: #fff8ec;
+  --warn-border: #f0cf9a;
+  --warn-text: #9a5b06;
 
   /* 错误状态（红）：必填星号、校验失败提示 */
   --danger: #e5484d;
@@ -239,6 +245,13 @@ tbody tr:hover {
   max-width: 320px;
 }
 
+/* 正在编辑某一行时搜索框会被禁用（否则重绘会把没保存的输入冲掉） */
+.search-input:disabled {
+  background-color: var(--primary-faint);
+  color: var(--text-light);
+  cursor: not-allowed;
+}
+
 /* 搜索结果为空时的提示单元格 */
 .empty-tip {
   padding: 28px 14px;
@@ -330,6 +343,20 @@ form {
   color: var(--danger-text);
 }
 
+/* 中性说明（蓝）：例如「网址里没写班级，已默认选中一个」这类提示 */
+.msg-info {
+  background-color: var(--primary-soft);
+  border-color: var(--primary-border);
+  color: var(--primary-dark);
+}
+
+/* 警告（橙）：例如「网址里的班级编号不存在，已替你选了第一个」 */
+.msg-warn {
+  background-color: var(--warn-bg);
+  border-color: var(--warn-border);
+  color: var(--warn-text);
+}
+
 /* ---------- 9. 页脚 ---------- */
 .site-footer {
   margin-top: auto;   /* 配合 body 的 flex，把页脚推到最底部 */
@@ -353,7 +380,229 @@ form {
   border: 0;
 }
 
-/* ---------- 11. 打印样式 ---------- */
+/* ---------- 11. 班级选择与班级信息（首页 / 名单页 / 录入页共用） ---------- */
+/*  本版起站点从「单个班级」升级为「多班级平台」，
+    于是多了几个新零件：选班下拉框、位置提示（面包屑）、班级标题区。 */
+
+/* 首页的「专业 / 班级」两个下拉框：宽屏并排，窄屏自动上下排列 */
+.picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 18px;
+}
+
+/* 下拉框沿用 .input 的外观，只补一个鼠标手型 */
+select.input {
+  cursor: pointer;
+}
+
+/* 「进入班级 / 直接录入」两个按钮所在的一行 */
+.picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 14px;
+}
+
+/* 次要按钮：白底 + 主色描边，用来和主按钮区分主次 */
+.btn-secondary {
+  display: inline-block;
+  padding: 11px 24px;
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 700;
+  color: var(--primary);
+  background-color: var(--card);
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color .2s;
+}
+
+.btn-secondary:hover {
+  background-color: var(--primary-soft);
+}
+
+/* 让 <a> 也能套用按钮外观（例如「回到首页选择班级」），去掉链接下划线 */
+.btn-link {
+  text-decoration: none;
+}
+
+/* 位置提示：首页 › 专业 › 班级 */
+.breadcrumb {
+  padding: 16px 0 4px;
+  font-size: 14px;
+  color: var(--text-light);
+}
+
+.breadcrumb a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.crumb-sep {
+  margin: 0 8px;
+  color: var(--text-light);
+}
+
+/* 当前位置（最后一级），加粗且不用链接色，表示"你在这里" */
+.crumb-current {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* 名单页顶部的班级标题区 */
+.class-head {
+  margin-bottom: 18px;
+}
+
+/* 标题下方的一行小字：人数与操作说明 */
+.class-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-light);
+}
+
+/* 录入页顶部「正在录入：某某班」的小标签 */
+.class-tag {
+  display: inline-block;
+  padding: 6px 14px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary-dark);
+  background-color: var(--primary-soft);
+  border-radius: 999px;
+}
+
+/* 「请先选择班级」提示卡片里的按钮 */
+.notice-actions {
+  margin-top: 16px;
+}
+
+/* 录入页顶部的「录入到哪个班」选择区：
+   用浅底 + 描边圈成一小块，和下面三个输入框区分开 ——
+   一眼能看出这是"录到哪儿"，而不是"录什么" */
+.class-picker {
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  background-color: var(--primary-faint);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* 这一区的小标题 */
+.picker-label {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+/* 区里的两个下拉框：比表单里的字段更紧凑一点 */
+.class-picker .form-item {
+  margin-bottom: 0;
+}
+
+/* 概览为空时的提示文字：横跨整个网格，不要只占一格 */
+.link-grid > .empty-tip {
+  grid-column: 1 / -1;
+}
+
+/* 窄屏：两个下拉框改成一列，避免字被挤断 */
+@media (max-width: 560px) {
+  .picker {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- 12. 名单页的行内编辑 ---------- */
+/*  在名单里点某行的「编辑」，这一行会就地变成输入框，改完点「保存」即生效。
+    不跳页、不弹窗，是修改同学信息最省事的方式。 */
+
+/* 操作列：只占内容需要的宽度，富余空间留给姓名、学号这些正式内容 */
+.col-action {
+  width: 1%;
+  white-space: nowrap;   /* 「编辑」两个字不拆行 */
+  text-align: right;
+}
+
+/* 正在编辑的那一行：加一层浅色底，明确告诉用户改的是哪一行 */
+tr.row-editing {
+  background-color: var(--primary-soft);
+}
+
+/* 行内编辑用的小按钮 */
+.btn-mini {
+  display: inline-block;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 700;
+  line-height: 1.5;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--text-light);
+  cursor: pointer;
+  transition: background-color .2s, color .2s, border-color .2s;
+}
+
+/* 并排两个按钮之间留出间距 */
+.btn-mini + .btn-mini {
+  margin-left: 6px;
+}
+
+/* 「编辑」：主色描边，平时弱化，指向时才变明显 */
+.btn-mini.btn-edit {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-mini.btn-edit:hover {
+  background-color: var(--primary-soft);
+}
+
+/* 「保存」：主色实心，是这一步的主要动作 */
+.btn-mini.btn-save {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.btn-mini.btn-save:hover {
+  background-color: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+/* 「取消」：沿用默认灰色，悬停时轻微加深 */
+.btn-mini.btn-cancel:hover {
+  background-color: var(--primary-faint);
+  color: var(--text);
+}
+
+/* 表格单元格里的输入框：比表单页的输入框更紧凑，免得把行撑高 */
+.cell-input {
+  width: 100%;
+  min-width: 96px;
+  padding: 7px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  background-color: var(--card);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  outline: none;
+}
+
+.cell-input:focus {
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+/* ---------- 13. 打印样式 ---------- */
 /*  班级名单最常见的用法之一是打印出来贴墙。
     这一节把导航、页脚、按钮、搜索框等交互元素全部隐藏，
     并把表格改成适合黑白打印的样式。 */
@@ -414,6 +663,17 @@ form {
   a {
     color: #000;
     text-decoration: none;
+  }
+
+  /* 万一正好停在编辑状态就点了打印：输入框按普通文字输出，不出现边框和底色 */
+  .cell-input {
+    padding: 0;
+    border: none;
+    background-color: transparent;
+  }
+
+  tr.row-editing {
+    background-color: transparent !important;
   }
 }
 
