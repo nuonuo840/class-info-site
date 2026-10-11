@@ -76,6 +76,7 @@
 ├── app.js          数据层（名单的读取与保存，名单页与录入页共用）
 ├── favicon.svg     浏览器标签页图标
 ├── README.md       本说明文件
+├── CHANGELOG.md    更新日志（各版本改了什么）
 └── LICENSE         MIT 开源许可证
 ```
 
@@ -317,7 +318,10 @@ var DEFAULT_STUDENTS = [
 
 ## 版本
 
-当前版本 **v0.2.1**。各版本发布说明见 [Releases](https://github.com/nuonuo840/class-info-site/releases)。
+当前版本 **v0.2.1**。
+
+- 各版本改了什么：见 [CHANGELOG.md](./CHANGELOG.md)
+- 各版本的下载与发布说明：见 [Releases](https://github.com/nuonuo840/class-info-site/releases)
 
 ---
 
