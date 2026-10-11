@@ -4,11 +4,13 @@
   页面一：首页（index.html）
   作用：作为整个平台的入口 —— 选择「专业 + 班级」，跳转到该班级页面。
 
-  首页包含四块：
+  首页包含六块：
     ① 选择班级 —— 专业下拉 + 班级下拉 + 进入按钮
-    ② 班级概览 —— 每个班级一张卡片，显示人数，点卡片直接进班
+    ② 班级概览 —— 每个班级一张卡片，显示人数；点卡片进班，卡片右侧「删除」可删掉这个班
     ③ 新建班级 —— 预置班级之外，可以自己加一个班级
-    ④ 项目介绍 —— 说明这个平台是做什么的
+    ④ 学校设置 —— 改全站显示的学校名（保存在本机浏览器）
+    ⑤ 数据管理 —— 一键清空本机全部数据，或把删掉的预置班级恢复回来
+    ⑥ 项目介绍 —— 说明这个平台是做什么的
 
   班级目录与同学名单都来自 app.js（数据层），本页不写死任何数据。
   ============================================================
@@ -86,7 +88,7 @@
     <!-- ---------- 模块二：班级概览 ---------- -->
     <section class="card">
       <h2>班级概览</h2>
-      <p>下面是全部班级，点任意一张卡片即可进入该班名单。</p>
+      <p>点任意一张卡片即可进入该班名单；卡片右侧的「删除」可以删掉整个班级（连同它的名单）。</p>
       <!-- 卡片由脚本生成，每张卡片显示班级名与当前人数 -->
       <div class="link-grid" id="overview"></div>
     </section>
@@ -152,7 +154,59 @@
       </form>
     </section>
 
-    <!-- ---------- 模块四：项目介绍 ---------- -->
+    <!-- ---------- 模块四：学校设置 ---------- -->
+    <section class="card">
+      <h2>学校设置</h2>
+      <p>
+        这里的名字会显示在所有页面的顶部和页脚。
+        改完只保存在<strong>这台电脑的浏览器里</strong>，不会影响别人看到的页面。
+      </p>
+
+      <!-- 保存结果提示条：默认隐藏，由脚本控制显示 -->
+      <div class="msg" id="schoolMsg" role="status" aria-live="polite"></div>
+
+      <form id="schoolForm" action="#">
+        <div class="form-item">
+          <label for="schoolInput">学校名称</label>
+          <input
+            type="text"
+            id="schoolInput"
+            class="input"
+            maxlength="30"
+            placeholder="例如：安徽师范大学">
+          <p class="form-hint">留空保存会恢复成默认的「某高校」</p>
+        </div>
+
+        <button type="submit" class="btn-submit">保存学校名</button>
+      </form>
+    </section>
+
+    <!-- ---------- 模块五：数据管理 ---------- -->
+    <section class="card">
+      <h2>数据管理</h2>
+      <p>
+        所有班级与同学名单都保存在<strong>这台电脑的浏览器里</strong>，不会上传到任何服务器。
+        换一台电脑、换一个浏览器，或清理浏览器数据之后，名单会回到初始的空状态。
+      </p>
+
+      <div class="msg" id="dataMsg" role="status" aria-live="polite"></div>
+
+      <div class="btn-row">
+        <button type="button" class="btn-danger" id="clearAllBtn">清空本机全部数据</button>
+        <button type="button" class="btn-secondary" id="restoreClassesBtn">恢复预置班级</button>
+      </div>
+
+      <p class="form-hint">
+        <strong>清空本机全部数据</strong>：一并清掉全部班级的名单、你在本页新建的班级、
+        设置过的学校名，以及「删除过的预置班级」这份记录。清空后无法恢复。
+      </p>
+      <p class="form-hint">
+        <strong>恢复预置班级</strong>：把之前删掉的预置班级（计科 1 班、软工 1 班等）找回来。
+        只影响班级目录，不会动你已经录入的同学名单。
+      </p>
+    </section>
+
+    <!-- ---------- 模块六：项目介绍 ---------- -->
     <section class="card">
       <h2>项目介绍</h2>
       <p>
@@ -167,7 +221,7 @@
       </p>
       <p>
         <strong>提示：</strong>名单数据保存在浏览器本地（localStorage），
-        换一台电脑、换一个浏览器，或清理浏览器数据后，会回到默认示例名单。
+        换一台电脑、换一个浏览器，或清理浏览器数据后，会回到初始的空名单。
       </p>
     </section>
 
@@ -182,11 +236,14 @@
   <script src="app.js"></script>
   <script>
     /*
-      首页脚本，做四件事：
-        1. 把页面上所有「学校名」的位置填上（数据层里的 SCHOOL）
+      首页脚本，做六件事：
+        1. 把页面上所有「学校名」的位置填上（取自数据层的 getSchoolName）
         2. 生成「专业」下拉框，以及随专业联动的「班级」下拉框
         3. 生成「班级概览」卡片（带各班人数）
         4. 处理「新建班级」表单
+        5. 处理「学校设置」表单（改完立即刷新全站显示的校名）
+        6. 处理「清空本机全部数据」「恢复预置班级」两个按钮
+        7. 跨标签页同步：别的标签页改了数据时自动重建本页
 
       注意：所有动态内容都用 textContent 写入，不用 innerHTML 拼接，
            避免用户输入的内容被当成 HTML 执行（XSS）。
@@ -200,6 +257,12 @@
       var navForm = document.getElementById('navForm');
       var classForm = document.getElementById('classForm');
       var classMsg = document.getElementById('classMsg');
+      var schoolForm = document.getElementById('schoolForm');
+      var schoolInput = document.getElementById('schoolInput');
+      var schoolMsg = document.getElementById('schoolMsg');
+      var dataMsg = document.getElementById('dataMsg');
+      var clearAllBtn = document.getElementById('clearAllBtn');
+      var restoreClassesBtn = document.getElementById('restoreClassesBtn');
 
       var statClasses = document.getElementById('statClasses');
       var statStudents = document.getElementById('statStudents');
@@ -212,10 +275,19 @@
       }
 
       /* ---------- 0. 填充页面上的学校名 ---------- */
-      var schoolEls = document.querySelectorAll('.school-name');
-      for (var i = 0; i < schoolEls.length; i++) {
-        schoolEls[i].textContent = ClassData.SCHOOL;
+
+      /* 页面上有多处「学校名」占位（顶部 logo、首屏标题、页脚），一次性全部填上。
+         改校名之后也要再调一次，所以单独抽成函数。 */
+      function syncSchoolName() {
+        var els = document.querySelectorAll('.school-name');
+        var name = ClassData.getSchoolName();
+
+        for (var i = 0; i < els.length; i++) {
+          els[i].textContent = name;
+        }
       }
+
+      syncSchoolName();
 
       /* ---------- 1. 生成「专业」下拉框 ---------- */
       function renderMajors(selected) {
@@ -307,8 +379,15 @@
         }
 
         classes.forEach(function (cls) {
+          /*
+            卡片结构：外层是个普通容器，里面才是「查看名单」的链接。
+            因为 <a> 里不允许再放 <button>，删除按钮得放在链接外面。
+          */
+          var card = document.createElement('div');
+          card.className = 'link-box class-card';
+
           var link = document.createElement('a');
-          link.className = 'link-box';
+          link.className = 'class-card-main';
           link.href = ClassData.buildUrl('roster.html', cls.id);
 
           var title = document.createElement('strong');
@@ -319,8 +398,50 @@
 
           link.appendChild(title);
           link.appendChild(desc);
-          overview.appendChild(link);
+
+          var del = document.createElement('button');
+          del.type = 'button';
+          del.className = 'btn-mini btn-del';
+          del.textContent = '删除';
+          del.setAttribute('aria-label', '删除班级 ' + ClassData.getClassName(cls));
+          del.addEventListener('click', function () {
+            deleteClass(cls);
+          });
+
+          card.appendChild(link);
+          card.appendChild(del);
+          overview.appendChild(card);
         });
+      }
+
+      /*
+        删除一个班级。
+
+        预置班级（写在 app.js 里的）删掉之后，可以在本页「数据管理」里用
+        「恢复预置班级」找回来；新建的班级删了就没了。
+        无论哪种，这个班的同学名单都会一起删掉 —— 所以先弹窗把话说清楚。
+      */
+      function deleteClass(cls) {
+        var count = ClassData.load(cls.id).length;
+        var fullName = ClassData.getClassName(cls);
+
+        var yes = window.confirm(
+          '确定要删除班级「' + fullName + '」吗？\n\n'
+          + '这个班现在有 ' + count + ' 名同学，名单会一起删掉。\n'
+          + '删除后无法恢复（预置班级可以稍后在「数据管理」里找回来，但名单找不回来）。'
+        );
+
+        if (!yes) return;
+
+        var result = ClassData.removeClass(cls.id);
+
+        if (!result.ok) {
+          showMsg(classMsg, '删除失败，请检查浏览器是否禁用了本地存储（隐私模式下无法保存）。', true);
+          return;
+        }
+
+        refreshAll('', '');
+        showMsg(classMsg, '已删除班级「' + result.name + '」。', false);
       }
 
       /* ---------- 5. 底部统计文字 ---------- */
@@ -423,7 +544,90 @@
         showMsg(classMsg, '已创建：' + ClassData.getClassName(result.cls) + '。现在可以直接进入这个班级了。', false);
       });
 
-      /* ---------- 9. 首次渲染 ---------- */
+      /* ---------- 9. 学校设置：改全站显示的校名 ---------- */
+
+      // 进页面时先把当前校名填进输入框
+      schoolInput.value = ClassData.getSchoolName();
+
+      schoolForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        var result = ClassData.setSchoolName(schoolInput.value);
+
+        if (!result.ok) {
+          showMsg(schoolMsg, '保存失败，请检查浏览器是否禁用了本地存储（隐私模式下无法保存）。', true);
+          return;
+        }
+
+        // 回填「实际生效的名字」：留空保存时会变回默认值，让用户看得见发生了什么
+        schoolInput.value = result.name;
+        syncSchoolName();
+
+        showMsg(schoolMsg, '已保存，页面上的学校名已更新为「' + result.name + '」。', false);
+      });
+
+      /* ---------- 10. 数据管理：清空本机全部数据 ---------- */
+
+      clearAllBtn.addEventListener('click', function () {
+        var yes = window.confirm(
+          '确定要清空这台电脑上的全部数据吗？\n\n'
+          + '会一并删除：\n'
+          + '· 全部班级的同学名单\n'
+          + '· 你在本页新建的班级\n'
+          + '· 设置过的学校名\n\n'
+          + '清空后无法恢复，确定继续吗？'
+        );
+
+        // 用户点了取消：什么都不动，只回一句
+        if (!yes) {
+          showMsg(dataMsg, '已取消，数据没有变动。', true);
+          return;
+        }
+
+        ClassData.resetAll();
+
+        // 把页面上所有跟着数据变的东西重建一遍，等同于刷新后的样子
+        syncSchoolName();
+        schoolInput.value = ClassData.getSchoolName();
+        refreshAll('', '');
+
+        showMsg(dataMsg, '已清空：全部名单、新建的班级和学校设置都恢复到了初始状态。', false);
+      });
+
+      /* ---------- 11. 数据管理：恢复被删掉的预置班级 ---------- */
+
+      restoreClassesBtn.addEventListener('click', function () {
+        var result = ClassData.restoreHidden();
+
+        if (!result.ok) {
+          showMsg(dataMsg, '恢复失败，请检查浏览器是否禁用了本地存储（隐私模式下无法保存）。', true);
+          return;
+        }
+
+        refreshAll('', '');
+        showMsg(dataMsg, '已恢复被删除的预置班级（本页新建的班级不受影响）。', false);
+      });
+
+      /* ---------- 12. 跨标签页同步 ---------- */
+
+      /*
+        同一个浏览器里，另一个标签页改了班级目录或学校名时，浏览器会发来 storage 事件。
+        本页跟着重建一遍（保留下拉框当前的选择），省得用户来回手动刷新。
+      */
+      window.addEventListener('storage', function (event) {
+        // 只关心本站在用的那些键（clear() 时 event.key 为 null，也一并处理）
+        if (event.key && event.key.indexOf('classInfoSite.') !== 0) return;
+
+        var major = majorSelect.value;        // 记住当前选择，重建后还是它
+        var classId = currentClassId();
+
+        syncSchoolName();
+        refreshAll(major, classId);
+
+        showMsg(dataMsg, '检测到另一个标签页的改动，已自动刷新。', false);
+      });
+
+      /* ---------- 13. 首次渲染 ---------- */
       refreshAll('', '');
     })();
   </script>

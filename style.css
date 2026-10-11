@@ -236,13 +236,26 @@ tbody tr:hover {
   color: var(--text-light);
 }
 
-/* 名单页搜索框所在的一行 */
+/* 名单页工具条：搜索框 + 导出 / 重新加载按钮 */
 .table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 14px;
 }
 
+/* 搜索框占满剩余宽度；按钮跟在后面 */
 .search-input {
+  flex: 1 1 220px;
   max-width: 320px;
+}
+
+/* 工具条右侧那一组按钮 */
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* 正在编辑某一行时搜索框会被禁用（否则重绘会把没保存的输入冲掉） */
@@ -602,7 +615,362 @@ tr.row-editing {
   box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
-/* ---------- 13. 打印样式 ---------- */
+/* 勾选列：只占一个复选框的宽度，富余空间留给姓名、学号 */
+.col-check {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.col-check input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+/* 正在编辑的那一行不允许勾选，视觉上也弱化一下 */
+.col-check input:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+/* ---------- 13. 批量操作（名单页） ---------- */
+/*  勾选同学之后才出现的操作条：挪到别的班、批量修改、批量删除。 */
+
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background-color: var(--primary-faint);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius);
+}
+
+/* 元素带 hidden 属性时必须是「不显示」。
+   这里要单独写一条，因为上面的 display:flex 会盖掉 hidden 自带的样式。 */
+.bulk-bar[hidden] {
+  display: none;
+}
+
+.bulk-count {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+/* 条里的一组操作：下拉框和按钮挨在一起 */
+.bulk-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulk-label {
+  font-size: 14px;
+  color: var(--text-light);
+}
+
+/* 操作条里的小号下拉框：比表单里的窄一些，别把整条撑得太长 */
+.input-mini {
+  width: auto;
+  min-width: 118px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* 「删除」小按钮：红色描边，平时弱化，指向时才变明显 */
+.btn-mini.btn-del {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-mini.btn-del:hover {
+  background-color: var(--danger-bg);
+}
+
+/* 大号危险按钮：用在「清空本机全部数据」这类不可撤销的操作上 */
+.btn-danger {
+  display: inline-block;
+  padding: 11px 24px;
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 700;
+  color: var(--on-primary);
+  background-color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color .2s, border-color .2s;
+}
+
+.btn-danger:hover {
+  background-color: var(--danger-text);
+  border-color: var(--danger-text);
+}
+
+/* 窄屏：批量操作条里的元素自然换行即可，不用额外调整 */
+@media (max-width: 560px) {
+  .input-mini {
+    min-width: 100px;
+  }
+}
+
+/* ---------- 14. 撤销条、顺序按钮、班级卡片的删除入口 ---------- */
+/*  14.1 撤销条：做过删除 / 移动 / 修改 / 排序之后出现，给一次「反悔」的机会。 */
+
+.undo-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  background-color: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 8px;
+}
+
+/* 元素带 hidden 属性时必须不显示 —— 否则会被上面的 display:flex 盖掉 */
+.undo-bar[hidden] {
+  display: none;
+}
+
+.undo-text {
+  font-size: 14px;
+  color: var(--warn-text);
+}
+
+.btn-mini.btn-undo {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-mini.btn-undo:hover {
+  background-color: var(--primary-soft);
+}
+
+/* 14.2 「上移 / 下移」：比编辑、删除更弱化，避免操作列太抢眼 */
+.btn-mini.btn-move {
+  color: var(--text-light);
+}
+
+.btn-mini.btn-move:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background-color: var(--primary-soft);
+}
+
+/* 已经在最上面 / 最下面时，对应的顺序按钮置灰 */
+.btn-mini:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+/* 14.3 一行里并排几个按钮：窄屏自动换行 */
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 14px;
+}
+
+/* 14.4 首页班级概览的卡片：左边「进班」链接，右边「删除」按钮 */
+.link-box.class-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.class-card-main {
+  flex: 1;
+  min-width: 0;          /* 让过长的班级名能正常换行，不把卡片撑破 */
+  text-decoration: none;
+  color: var(--text);
+}
+
+/* ---------- 15. 性别列与批量导入面板（名单页） ---------- */
+/*  15.1 性别列：内容只有一两个字，宽度收紧、居中，别把姓名和学号挤窄了。 */
+
+.col-gender {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* 行内编辑时的性别下拉框：复用 .cell-input 的外观，只调宽度和光标 */
+.cell-select {
+  min-width: 74px;
+  cursor: pointer;
+}
+
+/* 15.2 批量导入面板：点「导入」才展开，平时收着 */
+
+.import-panel {
+  padding: 16px;
+  margin-bottom: 14px;
+  background-color: var(--primary-faint);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius);
+}
+
+/* 带 hidden 属性时必须真的不显示 —— 上面的样式会盖掉浏览器默认的 hidden 表现 */
+.import-panel[hidden],
+.import-result[hidden] {
+  display: none;
+}
+
+.import-panel .panel-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* 「选择 CSV 文件」按钮 + 右边显示的文件名 */
+.import-file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+/* 真正的 <input type="file"> 藏起来，靠上面的 label 触发它 —— 原生控件太丑且不可控。
+   注意别加 pointer-events: none：那样 label 的点击就转发不到它身上了。 */
+.file-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+/* 长得像按钮的 label，专门用来触发文件选择 */
+.btn-file {
+  display: inline-block;
+  cursor: pointer;
+  background-color: var(--card);
+  border: 1px solid var(--primary-border);
+  color: var(--primary);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+.btn-file:hover {
+  background-color: var(--primary-soft);
+}
+
+.import-filename {
+  font-size: 13px;
+  color: var(--text-light);
+  word-break: break-all;
+}
+
+/* 粘贴框：用等宽字体 + 保留空格，粘进来的表格才看得出列对齐 */
+.import-textarea {
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre;
+  overflow-x: auto;
+  resize: vertical;
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.import-result {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--primary-border);
+}
+
+.import-summary {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* 预览表：比正式名单表更紧凑，因为它只是让人核对一遍 */
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background-color: var(--card);
+}
+
+.import-table th,
+.import-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.import-table th {
+  background-color: var(--primary-soft);
+  font-weight: 600;
+}
+
+/* 认不出来、会被跳过的行整行标红，一眼能看出问题出在哪一行 */
+.import-row-error td {
+  background-color: var(--danger-bg);
+  color: var(--text-light);
+}
+
+.import-state {
+  font-size: 12px;
+}
+
+.import-new { color: var(--success-text); }
+.import-dup { color: var(--warn-text); }
+.import-bad { color: var(--danger-text); }
+
+/* 学号重复时怎么办：两个单选项 */
+.import-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.import-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.import-radio input {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  /* 窄屏下预览表也横向滚动，不硬挤 */
+  .import-table th,
+  .import-table td {
+    padding: 6px 8px;
+  }
+}
+
+/* ---------- 16. 打印样式 ---------- */
 /*  班级名单最常见的用法之一是打印出来贴墙。
     这一节把导航、页脚、按钮、搜索框等交互元素全部隐藏，
     并把表格改成适合黑白打印的样式。 */

@@ -137,28 +137,36 @@
           <p class="form-hint">与学籍一致的正式姓名</p>
         </div>
 
-        <!-- 字段二：学号 -->
+        <!-- 字段二：性别（选填） -->
+        <div class="form-item">
+          <label for="gender">性别</label>
+          <!-- 选填。下拉里只有三个值，省得每个人写法不一样（男/男生/M 混着来） -->
+          <select id="gender" name="gender" class="input">
+            <option value="">未填写</option>
+            <option value="男">男</option>
+            <option value="女">女</option>
+          </select>
+          <p class="form-hint">选填，会在名单页单独占一列</p>
+        </div>
+
+        <!-- 字段三：学号 -->
         <div class="form-item">
           <label for="stuId">学号 <span class="required">*</span></label>
           <!--
-            pattern 做正则校验：必须是 10 位数字
-            title 是校验不通过时浏览器原生气泡里显示的文案
+            学号的 pattern、maxlength、提示文案都不写死在这里，而是由页面底部脚本
+            按 app.js 顶部的「学号规则」三个常量自动填进来 ——
+            换学校只要改 app.js 一处，三个页面一起跟着变。
           -->
           <input
             type="text"
             id="stuId"
             name="stuId"
             class="input"
-            placeholder="请输入 10 位学号，例如：2026110113"
-            pattern="\d{10}"
-            maxlength="10"
-            inputmode="numeric"
-            title="学号应为 10 位数字"
             required>
-          <p class="form-hint">10 位数字，如 2026110113</p>
+          <p class="form-hint" id="stuIdHint"></p>
         </div>
 
-        <!-- 字段三：手机号（即名单页里的「联系方式」这一列） -->
+        <!-- 字段四：手机号（即名单页里的「联系方式」这一列） -->
         <div class="form-item">
           <label for="contact">手机号 <span class="required">*</span></label>
           <!--
@@ -202,6 +210,19 @@
         <strong>如果学号在本班已经存在</strong>，页面会弹窗问你要不要用这次填写的信息覆盖原有记录 ——
         之前漏填手机号的同学，用同样的学号重填一次就能补上。
         （注意：学号查重只在<strong>本班范围</strong>内判断，不同班级可以有相同学号。）
+      </p>
+      <p>
+        姓名、学号、手机号三项必填，<strong>性别为选填</strong> ——
+        不填也没关系，名单页会显示成「—」，之后在名单页随时能补上。
+      </p>
+      <p>
+        学号的位数要求由 <code>app.js</code> 顶部的「学号规则」统一决定
+        （默认 4~20 位数字），输入框旁边的提示就是当前生效的要求。
+        如果要换成别的学校、那所学校学号位数不同，改那一处即可，三个页面一起跟着变。
+      </p>
+      <p>
+        如果一次要录几十位同学，不用一条条敲 —— 到「班级名单」页点「<strong>导入</strong>」，
+        可以把 Excel 里整理好的一份名单整批导进来。
       </p>
       <p>
         数据不会上传到任何服务器，所以换一台电脑、或换一个浏览器就看不到了。
@@ -269,11 +290,31 @@
 
       /* ---------- 0. 公共小工具 ---------- */
 
-      // 填充页面上所有「学校名」的位置
+      // 填充页面上所有「学校名」的位置（取当前设置的那个，默认是「某高校」）
       var schoolEls = document.querySelectorAll('.school-name');
       for (var s = 0; s < schoolEls.length; s++) {
-        schoolEls[s].textContent = ClassData.SCHOOL;
+        schoolEls[s].textContent = ClassData.getSchoolName();
       }
+
+      /*
+        学号输入框：位数、是否允许字母，全部由 app.js 顶部的「学号规则」决定。
+        这里只把它套到输入框的 pattern / maxlength / 提示文案上 ——
+        所以在 app.js 里改一次，录入页、名单页和批量导入会同时生效。
+      */
+      (function applySidRule() {
+        var stuIdEl = document.getElementById('stuId');
+        var stuIdHint = document.getElementById('stuIdHint');
+        var hint = ClassData.sidHint();
+        var example = ClassData.sidExample();   // 照当前规则生成的合规例子
+
+        stuIdEl.pattern = ClassData.SID_PATTERN.source;
+        stuIdEl.maxLength = ClassData.SID_MAX;
+        stuIdEl.placeholder = '请输入' + hint + '，例如：' + example;
+        stuIdEl.title = '学号应为' + hint;
+        stuIdEl.inputMode = ClassData.SID_ALLOW_LETTER ? 'text' : 'numeric';
+
+        stuIdHint.textContent = hint + '，如 ' + example;
+      })();
 
       /*
         显示提示条。kind 取 'info'（中性说明）/ 'warn'（警告）/ 'error'（错误），
@@ -478,6 +519,7 @@
 
         var className = ClassData.getClassName(cls);
         var name = document.getElementById('name').value.trim();
+        var gender = document.getElementById('gender').value;   // 选填，可能是空字符串
         var stuId = document.getElementById('stuId').value.trim();
         var contact = document.getElementById('contact').value.trim();
 
@@ -486,8 +528,16 @@
           return;
         }
 
+        // 性别是选填的，规整成 '男' / '女' / ''（未填写）后再入库
+        var student = {
+          name: name,
+          sid: stuId,
+          gender: ClassData.normalizeGender(gender),
+          contact: contact
+        };
+
         // 往「当前班级」里加人
-        var result = ClassData.add(classId, { name: name, sid: stuId, contact: contact });
+        var result = ClassData.add(classId, student);
 
         // 情况一：学号在本班已存在 —— 问一句要不要覆盖，避免手滑改掉别人的信息
         if (!result.ok && result.reason === 'duplicate') {
@@ -502,7 +552,7 @@
           );
 
           if (yes) {
-            var updated = ClassData.update(classId, stuId, { name: name, sid: stuId, contact: contact });
+            var updated = ClassData.update(classId, stuId, student);
 
             if (updated.ok) {
               showMsg('已更新：' + name + '（学号 ' + stuId + '）的手机号为 ' + contact + '。');
@@ -530,6 +580,33 @@
         // 清空三个输入框，方便继续录入下一位（班级选择在表单之外，不受影响）
         infoForm.reset();
         syncContext();   // 刷新「该班已有 N 名同学」
+      });
+
+      /* ---------- 9. 跨标签页同步 ---------- */
+
+      /*
+        别的标签页改了数据（新建 / 删除班级、改校名）时，本页跟着更新一下，
+        免得这里还显示着已经删掉的班级。
+      */
+      window.addEventListener('storage', function (event) {
+        // 只关心本站在用的那些键（clear() 时 event.key 为 null，也一并处理）
+        if (event.key && event.key.indexOf('classInfoSite.') !== 0) return;
+
+        var major = majorSelect.value;        // 记住当前选择，重建后尽量还是它
+        var classId = currentClassId();
+        var i;
+
+        // 校名可能被改过
+        for (i = 0; i < schoolEls.length; i++) {
+          schoolEls[i].textContent = ClassData.getSchoolName();
+        }
+
+        // 班级目录可能变了
+        renderMajors(major);
+        renderClasses(majorSelect.value, classId);
+        syncContext();
+
+        showMsg('检测到另一个标签页的改动，班级列表已更新。', 'info');
       });
     })();
   </script>

@@ -12,6 +12,26 @@
     没带 c 参数、或带的编号不存在时，本页不再把人赶回首页，
     而是就地显示「专业 → 班级」选择器，选完直接进入。这样失效链接不再是死路。
 
+  本版新增的「管理」能力（每行最左边有一列复选框）：
+    · 删除 —— 点某行的「删除」，确认后把这位同学从本班移除
+    · 批量修改 —— 选中多位同学后点「批量修改信息」，这些行会同时变成输入框，
+                  每行各自保存，改完点自己那行的「保存」即可
+    · 移动到别的班 —— 选中多位同学，在上方选好目标班级，点「移动过去」一次性转班
+    · 批量删除 —— 选中多位同学后一次删掉
+    · 上移 / 下移 —— 每行操作列里，用来调整同学在名单里的顺序
+    · 按学号排序 —— 工具条上一键把整份名单按学号从小到大重排（可撤销）
+    · 导入 —— 从 CSV 文件、或从 Excel 复制粘贴的内容批量导入同学：
+              先「识别」出一张预览表，看清楚会增加几位、哪几位会覆盖 / 跳过，再确认导入
+    · 导出 CSV —— 把当前显示的名单导出成表格文件，可直接用 Excel 打开
+    · 撤销 —— 删除 / 移动 / 修改 / 排序 / 导入之后，顶部会出现「撤销」按钮，可退回上一步
+              （只在本页本次打开期间有效，刷新页面就清空）
+
+  表格共七列：勾选、序号、姓名、性别、学号、联系方式、操作。
+  性别是选填的，没填的显示成「—」。
+
+  另一个标签页改了数据时，本页会自动重新加载（见脚本里的 storage 监听）；
+  如果本页正在编辑，则只弹提示，不打断你手上的活。
+
   表格结构：table > caption（表格标题）
             table > thead > tr > th（表头）
             table > tbody > tr > td（数据行）
@@ -129,33 +149,159 @@
       -->
       <div class="msg" id="msg" role="status" aria-live="polite"></div>
 
-      <!-- 搜索框：输入姓名、学号或手机号即时筛选。打印时自动隐藏 -->
+      <!--
+        撤销条：做过「可撤销的改动」之后才出现（删除 / 移动 / 修改 / 排序），
+        显示上一步做了什么，并提供「撤销」。打印时隐藏。
+      -->
+      <div class="undo-bar no-print" id="undoBar" hidden>
+        <span class="undo-text" id="undoText"></span>
+        <button type="button" class="btn-mini btn-undo" id="undoBtn">撤销</button>
+      </div>
+
+      <!--
+        工具条：搜索框 + 导出 / 重新加载两个按钮。打印时整条隐藏。
+        「重新加载」用于手动拉取别的标签页做的改动（正常情况下会自动同步）。
+      -->
       <div class="table-toolbar no-print">
         <!-- 视觉上隐藏的标签，供屏幕阅读器说明这个输入框的用途 -->
-        <label class="sr-only" for="searchBox">按姓名、学号或手机号搜索同学</label>
+        <label class="sr-only" for="searchBox">按姓名、性别、学号或手机号搜索同学</label>
         <input
           type="search"
           id="searchBox"
           class="input search-input"
-          placeholder="输入姓名、学号或手机号筛选…"
+          placeholder="输入姓名、性别、学号或手机号筛选…"
           autocomplete="off">
+
+        <div class="toolbar-actions">
+          <button type="button" class="btn-mini" id="sortBtn" title="按学号从小到大重排名单（可撤销）">按学号排序</button>
+          <button type="button" class="btn-mini" id="importBtn" title="从 CSV 文件或 Excel 粘贴的内容批量导入同学">导入</button>
+          <button type="button" class="btn-mini" id="exportCsv" title="把当前显示的名单导出成 CSV 文件">导出 CSV</button>
+          <button type="button" class="btn-mini" id="reloadBtn" title="重新读取本机保存的数据">重新加载</button>
+        </div>
+      </div>
+
+      <!--
+        批量导入面板：点工具条上的「导入」才出现。打印时隐藏。
+        流程是「给数据 → 识别 → 预览 → 选冲突处理方式 → 确认导入」，
+        不预览就给结果的话，没人敢点那个「确认」。
+      -->
+      <div class="import-panel no-print" id="importPanel" hidden>
+        <p class="panel-title">批量导入同学</p>
+
+        <p class="form-hint">
+          两种给数据的方式，用哪种都行：<strong>选一个 CSV 文件</strong>，
+          或者<strong>直接从 Excel 里复制表格、粘贴到下面的框里</strong>。
+          第一行写成「姓名 / 性别 / 学号 / 手机号」这样的表头最好；
+          没有表头也能认，按「姓名、性别、学号、手机号」的位置对应。
+        </p>
+
+        <div class="import-file-row">
+          <label class="btn-mini btn-file" for="importFile">选择 CSV 文件</label>
+          <!-- 真正的文件框藏起来，靠上面的 label 触发；读进来的内容会填到下面的文本框里，
+               用户可以顺手改，也保证「选文件」和「粘贴」走的是同一条解析路径 -->
+          <input type="file" id="importFile" class="file-hidden" accept=".csv,text/csv">
+          <span class="import-filename" id="importFileName">未选择文件</span>
+        </div>
+
+        <label class="sr-only" for="importText">粘贴要导入的表格内容</label>
+        <textarea
+          id="importText"
+          class="input import-textarea"
+          rows="6"
+          placeholder="把 Excel 里的表格直接粘贴到这里，一行一位同学，例如：&#10;张三	男	2026110101	13800000001&#10;王雨桐	女	2026110102	13800000002"></textarea>
+
+        <p class="import-actions">
+          <button type="button" class="btn-mini btn-save" id="importParse">识别</button>
+          <button type="button" class="btn-mini" id="importClose">关闭</button>
+        </p>
+
+        <!-- 识别结果：先给一张预览表，确认无误再导 -->
+        <div class="import-result" id="importResult" hidden>
+          <p class="import-summary" id="importSummary"></p>
+
+          <div class="table-wrap">
+            <table class="import-table">
+              <caption class="sr-only">导入预览，逐行显示识别到的姓名、性别、学号、手机号与处理结果</caption>
+              <thead>
+                <tr>
+                  <th scope="col">行</th>
+                  <th scope="col">姓名</th>
+                  <th scope="col">性别</th>
+                  <th scope="col">学号</th>
+                  <th scope="col">手机号</th>
+                  <th scope="col">判定</th>
+                </tr>
+              </thead>
+              <tbody id="importPreviewBody"></tbody>
+            </table>
+          </div>
+
+          <div class="import-mode">
+            <span class="bulk-label">学号与本班重复时</span>
+            <label class="import-radio">
+              <input type="radio" name="importMode" value="skip" checked> 跳过，保留本班原有记录
+            </label>
+            <label class="import-radio">
+              <input type="radio" name="importMode" value="overwrite"> 覆盖，用表格里的内容替换
+            </label>
+          </div>
+
+          <p class="import-actions">
+            <button type="button" class="btn-mini btn-save" id="importConfirm">确认导入</button>
+            <button type="button" class="btn-mini" id="importBack">重新识别</button>
+          </p>
+        </div>
+      </div>
+
+      <!--
+        批量操作条：勾选了同学之后才出现（默认隐藏，由脚本控制）。
+        包含两组操作：移动到别的班级、以及批量修改 / 删除。
+        打印时整条隐藏。
+      -->
+      <div class="bulk-bar no-print" id="bulkBar" hidden>
+        <!-- 已选人数，由脚本写入 -->
+        <p class="bulk-count" id="bulkCount"></p>
+
+        <!-- 第一组：把选中的同学整体搬到别的班 -->
+        <div class="bulk-group">
+          <span class="bulk-label">移动到</span>
+          <!-- 目标专业 / 目标班级，两个联动下拉框 -->
+          <select id="moveMajorSel" class="input input-mini" aria-label="目标专业"></select>
+          <select id="moveClassSel" class="input input-mini" aria-label="目标班级"></select>
+          <button type="button" class="btn-mini btn-save" id="bulkMove">移动过去</button>
+        </div>
+
+        <!-- 第二组：就地批量修改，或直接删除 -->
+        <div class="bulk-group">
+          <button type="button" class="btn-mini btn-edit" id="bulkEdit">批量修改信息</button>
+          <button type="button" class="btn-mini btn-del" id="bulkDelete">删除选中</button>
+          <button type="button" class="btn-mini" id="bulkClear">取消选择</button>
+        </div>
       </div>
 
       <!-- 表格外层加一层容器，窄屏时可横向滚动；tabindex 让键盘也能聚焦并滚动它 -->
       <div class="table-wrap" role="region" aria-label="班级同学名单" tabindex="0">
         <table>
           <!-- 表格标题：视觉上隐藏，供屏幕阅读器朗读 -->
-          <caption class="sr-only">班级同学名单，包含序号、姓名、学号、联系方式和操作五列</caption>
+          <caption class="sr-only">班级同学名单，包含全选、序号、姓名、性别、学号、联系方式和操作七列</caption>
 
           <!-- 表头：scope="col" 告诉屏幕阅读器这是列标题 -->
           <thead>
             <tr>
+              <!--
+                勾选列：表头这个是「全选」—— 勾上会把当前显示的同学全部选中，
+                勾掉则清空选择。打印名单时这一列不出现。
+              -->
+              <th scope="col" class="col-check no-print">
+                <input type="checkbox" id="checkAll" aria-label="全选当前显示的同学">
+              </th>
               <th scope="col">序号</th>
               <th scope="col">姓名</th>
+              <th scope="col" class="col-gender">性别</th>
               <th scope="col">学号</th>
               <th scope="col">联系方式</th>
               <!--
-                操作列：放「编辑」按钮。加 no-print，打印名单时这一列自动隐藏
+                操作列：放「编辑」「删除」按钮。加 no-print，打印名单时这一列自动隐藏
                 （见 style.css 的 @media print），纸上不会出现按钮。
               -->
               <th scope="col" class="col-action no-print">操作</th>
@@ -208,16 +354,22 @@
            - 查不到（没带参数，或编号不存在）→ 就地显示「专业 → 班级」选择器，
              选完点「查看名单」直接进入，不再把人赶回首页
         2. 读取该班名单 → 生成表格
-        3. 支持关键词筛选
-        4. 支持行内修改（点「编辑」就地变输入框）
+        3. 支持关键词筛选（姓名 / 性别 / 学号 / 手机号）
+        4. 支持就地修改（点「编辑」该行变输入框）、删除、以及多选后的批量操作
+        5. 「按学号排序」一键重排整份名单；「导入」从 CSV 或 Excel 粘贴的内容批量灌数据
 
-      三个要点：
+      四个要点：
         1. 单元格内容用 textContent 写入，而不是 innerHTML。
            因为名单来自用户输入，用 innerHTML 拼接会有被当成 HTML 执行的风险（XSS）。
         2. 序号取「该同学在完整名单中的位置」，而不是筛选结果里的序号。
            这样搜索之后序号依然对应真实排名，不会重新从 1 开始。
-        3. 编辑是「就地」进行的：点某行的「编辑」，这一行的三个字段立刻变成输入框，
-           不用跳页、不用弹窗；改完点「保存」写回本地存储。
+           （也正因为序号有这个含义，「按学号排序」才是真的改数据、而不是只换个显示顺序。）
+        3. 编辑是「就地」进行的：点某行的「编辑」，这一行的四个字段立刻变成
+           输入框 / 下拉框，不用跳页、不用弹窗；改完点「保存」写回本地存储。
+           可以同时编辑多行（批量修改）—— 每行各有各的「保存」。
+        4. 重绘表格前会先把「正在编辑但还没保存」的内容收集起来（草稿），
+           重建后再填回去 —— 否则一重绘，用户敲了一半的东西就没了。
+           草稿是靠 data-sid / data-field 两个属性收集的，所以输入框和下拉框用的是同一套机制。
     */
     (function () {
       var tbody = document.getElementById('rosterBody');
@@ -242,10 +394,30 @@
       var navRoster = document.getElementById('navRoster');
       var navForm = document.getElementById('navForm');
 
+      // 批量操作相关的元素
+      var checkAll = document.getElementById('checkAll');
+      var bulkBar = document.getElementById('bulkBar');
+      var bulkCount = document.getElementById('bulkCount');
+      var moveMajorSel = document.getElementById('moveMajorSel');
+      var moveClassSel = document.getElementById('moveClassSel');
+
+      // 撤销条
+      var undoBar = document.getElementById('undoBar');
+      var undoText = document.getElementById('undoText');
+
+      // 批量导入面板
+      var importPanel = document.getElementById('importPanel');
+      var importFile = document.getElementById('importFile');
+      var importFileName = document.getElementById('importFileName');
+      var importText = document.getElementById('importText');
+      var importResult = document.getElementById('importResult');
+      var importSummary = document.getElementById('importSummary');
+      var importPreviewBody = document.getElementById('importPreviewBody');
+
       /* ---------- 0. 公共：填充学校名 ---------- */
       var schoolEls = document.querySelectorAll('.school-name');
       for (var s = 0; s < schoolEls.length; s++) {
-        schoolEls[s].textContent = ClassData.SCHOOL;
+        schoolEls[s].textContent = ClassData.getSchoolName();
       }
 
       /* ---------- 1. 班级参数无效时的「就地选班」 ---------- */
@@ -398,11 +570,30 @@
       document.getElementById('linkForm').href = ClassData.buildUrl('form.html', classId);
 
       /*
-        当前正在编辑的那位同学的「原学号」，null 表示没有人在编辑。
+        正在编辑的那些同学的「原学号」（数组）。
         为什么记原学号而不是行号：学号本身也是允许修改的字段，
         必须用「改之前」的值才能定位到这条记录。
+
+        平时里面只有一个学号（点某行的「编辑」就是这种）；
+        点「批量修改信息」时会一次放进去好几个，于是多行同时变成输入框，
+        每行各自有「保存 / 取消」，互不影响。
       */
-      var editingSid = null;
+      var editingSids = [];
+
+      /*
+        被勾选的同学的学号（批量操作管的就是这些人）。
+        用学号而不是行号存，这样表格重绘、筛选之后依然对得上。
+      */
+      var selectedSids = [];
+
+      /*
+        编辑中但还没保存的输入内容，形如：
+          { '2026110101': { name: '…', sid: '…', contact: '…' } }
+
+        每次重绘表格前先把它收起来，重建之后再填回去 ——
+        否则用户敲了一半的内容会被重绘抹掉。
+      */
+      var drafts = {};
 
       /*
         联系方式显示格式化：
@@ -419,18 +610,24 @@
         return contact ? String(contact) : '—';
       }
 
-      /* 格式校验：规则与录入页 form.html 的 pattern 保持一致 */
+      /*
+        格式校验。
+        学号规则来自 app.js 顶部的「学号规则」三个常量（位数、能否带字母），
+        所以这里不写死 —— 换学校只改那一处，录入页、本页、批量导入一起变。
+      */
       function isValidSid(sid) {
-        return /^\d{10}$/.test(sid);          // 学号：10 位数字
+        return ClassData.checkSid(sid).ok;
       }
 
       function isValidContact(contact) {
         return /^1[3-9]\d{9}$/.test(contact); // 手机号：1 开头、第 2 位 3~9、共 11 位
       }
 
-      /* 提示条：isError 为 true 时显示红色版本 */
-      function showMsg(text, isError) {
-        msgEl.className = isError ? 'msg msg-error' : 'msg';
+      /*
+        提示条。kind 取 'error'（红）或 'warn'（橙），不传则按成功（绿）处理。
+      */
+      function showMsg(text, kind) {
+        msgEl.className = kind ? 'msg msg-' + kind : 'msg';
         msgEl.textContent = text;
         msgEl.style.display = 'block';
       }
@@ -442,8 +639,8 @@
 
       /*
         编辑期间禁用搜索框。
-        原因：搜索会重新渲染整张表格，正在输入的草稿会跟着消失。
-        直接禁用比"悄悄丢掉用户输入"更好预期。
+        草稿其实已经保得住（见 drafts），但编辑中的行一旦被筛掉，
+        用户就找不到自己在改哪一条了 —— 索性先禁用，改完再搜。
       */
       function setSearchEnabled(enabled) {
         searchBox.disabled = !enabled;
@@ -457,18 +654,58 @@
         return td;
       }
 
-      /* 造一个编辑用的输入框（用 value 赋值，同样避免 XSS） */
-      function makeInput(id, value, ariaLabel, maxLength, inputMode) {
+      /*
+        造一个编辑用的输入框（用 value 赋值，同样避免 XSS）。
+
+        sid 是这位同学「改之前」的学号，field 是字段名 —— 两个都写到 data-* 上：
+        重绘前靠它们收集草稿，保存时靠它们定位到具体是哪一格。
+      */
+      function makeInput(sid, field, value, ariaLabel, maxLength, inputMode) {
         var input = document.createElement('input');
         input.type = 'text';
-        input.id = id;
         input.className = 'cell-input';
         input.value = value == null ? '' : String(value);
+        input.setAttribute('data-sid', sid);
+        input.setAttribute('data-field', field);
         input.setAttribute('aria-label', ariaLabel);
         if (maxLength) input.maxLength = maxLength;
         if (inputMode) input.inputMode = inputMode;
         return input;
       }
+
+      /*
+        造一个编辑用的下拉框。
+
+        性别用的是它而不是输入框：取值只有「男 / 女 / 未填写」三种，
+        用下拉框既省得打错（写成「男生」「M」），也让批量修改时不用手输。
+
+        和 makeInput 一样，带着 data-sid / data-field ——
+        重绘前靠它们收集草稿，保存时靠它们找到是哪一格。
+      */
+      function makeSelect(sid, field, value, ariaLabel, options) {
+        var select = document.createElement('select');
+        select.className = 'cell-input cell-select';
+        select.setAttribute('data-sid', sid);
+        select.setAttribute('data-field', field);
+        select.setAttribute('aria-label', ariaLabel);
+
+        options.forEach(function (opt) {
+          var option = document.createElement('option');
+          option.value = opt.value;
+          option.textContent = opt.text;
+          select.appendChild(option);
+        });
+
+        select.value = value == null ? '' : String(value);
+        return select;
+      }
+
+      /* 性别下拉的三个选项（未填写放最前面，也是默认值） */
+      var GENDER_OPTIONS = [
+        { value: '', text: '—' },
+        { value: '男', text: '男' },
+        { value: '女', text: '女' }
+      ];
 
       /* 造一个操作列上的小按钮 */
       function makeButton(text, extraClass, ariaLabel, onClick) {
@@ -483,37 +720,75 @@
 
       /* ---------- 进入 / 退出编辑状态 ---------- */
 
-      function startEdit(sid) {
-        editingSid = sid;
+      /*
+        重绘前把「正在编辑的输入框」里的内容记下来。
+        返回 { 学号: { name, sid, contact } }。
+      */
+      function collectDrafts() {
+        var inputs = tbody.querySelectorAll('.cell-input');
+        var result = {};
+
+        for (var i = 0; i < inputs.length; i++) {
+          var sid = inputs[i].getAttribute('data-sid');
+          var field = inputs[i].getAttribute('data-field');
+          if (!sid || !field) continue;
+
+          if (!result[sid]) result[sid] = {};
+          result[sid][field] = inputs[i].value;
+        }
+
+        return result;
+      }
+
+      /* 让一批同学进入编辑态（传学号数组；单行编辑就传一个元素的数组） */
+      function startEdit(sids) {
+        editingSids = sids.slice();
         hideMsg();
         setSearchEnabled(false);
         render(searchBox.value);
 
-        // 光标直接落到姓名框并全选，方便直接改写
-        var nameInput = document.getElementById('editName');
-        if (nameInput) {
-          nameInput.focus();
-          nameInput.select();
+        // 光标落到第一个姓名框并全选，方便直接改写
+        var firstInput = tbody.querySelector('.cell-input');
+        if (firstInput) {
+          firstInput.focus();
+          firstInput.select();
         }
       }
 
-      function cancelEdit() {
-        editingSid = null;
+      /*
+        退出编辑。不传参数 = 全部退出；传学号数组 = 只让这几行退出。
+        （每一行都有自己的「取消」，所以需要后者。）
+      */
+      function cancelEdit(sids) {
+        var target = sids || editingSids;
+
+        editingSids = editingSids.filter(function (sid) {
+          return target.indexOf(sid) === -1;
+        });
+
+        // 这几行的草稿也一并丢掉
+        target.forEach(function (sid) { delete drafts[sid]; });
+
         hideMsg();
-        setSearchEnabled(true);
+        setSearchEnabled(editingSids.length === 0);
         render(searchBox.value);
       }
 
-      /* 保存这一行的修改 */
-      function saveEdit(oldSid) {
-        var nameInput = document.getElementById('editName');
-        var sidInput = document.getElementById('editSid');
-        var contactInput = document.getElementById('editContact');
+      /*
+        保存某一行的修改。
+        tr 是这一行的 <tr>，oldSid 是这位同学「改之前」的学号。
+      */
+      function saveEdit(tr, oldSid) {
+        var nameInput = tr.querySelector('.cell-input[data-field="name"]');
+        var genderInput = tr.querySelector('.cell-input[data-field="gender"]');
+        var sidInput = tr.querySelector('.cell-input[data-field="sid"]');
+        var contactInput = tr.querySelector('.cell-input[data-field="contact"]');
 
         // 已经不在编辑状态（比如连点两次保存）就直接返回
         if (!nameInput || !sidInput || !contactInput) return;
 
         var name = nameInput.value.trim();
+        var gender = genderInput ? genderInput.value : '';   // 性别是选填的
         var sid = sidInput.value.trim();
         var contact = contactInput.value.trim();
 
@@ -522,23 +797,28 @@
           只弹提示并让光标回到出问题的那个输入框。
         */
         if (!name) {
-          showMsg('姓名不能为空。', true);
+          showMsg('姓名不能为空。', 'error');
           nameInput.focus();
           return;
         }
         if (!isValidSid(sid)) {
-          showMsg('学号应为 10 位数字，例如 2026110113。', true);
+          showMsg('学号应为' + ClassData.sidHint() + '，例如 ' + ClassData.sidExample() + '。', 'error');
           sidInput.focus();
           return;
         }
         if (!isValidContact(contact)) {
-          showMsg('手机号应为 11 位纯数字，不要空格或横线，例如 13800000001。', true);
+          showMsg('手机号应为 11 位纯数字，不要空格或横线，例如 13800000001。', 'error');
           contactInput.focus();
           return;
         }
 
+        // 先留一份快照，改成功之后才记成「可撤销的一步」
+        var before = snapshot([classId]);
+
         // 注意：第一个参数是班级 id，第二个是这位同学「改之前」的学号
-        var result = ClassData.update(classId, oldSid, { name: name, sid: sid, contact: contact });
+        var result = ClassData.update(classId, oldSid, {
+          name: name, sid: sid, gender: gender, contact: contact
+        });
 
         if (!result.ok) {
           var reasons = {
@@ -546,16 +826,720 @@
             duplicate: '学号 ' + sid + ' 已被本班另一位同学占用，请换一个学号。',
             storage: '保存失败，请检查浏览器是否禁用了本地存储。'
           };
-          showMsg(reasons[result.reason] || '保存失败。', true);
+          showMsg(reasons[result.reason] || '保存失败。', 'error');
           return;
         }
 
-        // 保存成功：退出编辑状态，重新读一遍数据后重绘
-        editingSid = null;
+        // 保存成功：这一行退出编辑态，重新读一遍数据后重绘
+        // （其它还在编辑的行不受影响，草稿会原样保留）
+        editingSids = editingSids.filter(function (s) { return s !== oldSid; });
+        delete drafts[oldSid];
+
         all = ClassData.load(classId);
-        setSearchEnabled(true);
+        pushUndo('修改「' + name + '」的信息', before);
+        setSearchEnabled(editingSids.length === 0);
         render(searchBox.value);
         showMsg('已保存：' + name + '（学号 ' + sid + '，手机号 ' + formatContact(contact) + '）。', false);
+      }
+
+      /* ---------- 撤销栈 ---------- */
+
+      /*
+        撤销用的快照栈。只活在本次页面打开期间（刷新即清空），不写进本地存储 ——
+        它是「手滑保险」，不是历史记录功能。
+
+        每一项形如：
+          { label: '删除「张三」', items: [ { cid: 'cs-2026-1', list: [...] } ] }
+
+        items 里存的是「改动发生之前」的完整名单，可能不止一个班
+        （跨班移动要同时还原原班和目标班两份）。
+      */
+      var UNDO_LIMIT = 20;
+      var undoStack = [];
+
+      /* 抓一份名单快照。深拷贝一层，免得后面的改动把快照里的内容也改掉 */
+      function snapshot(cids) {
+        var items = [];
+
+        for (var i = 0; i < cids.length; i++) {
+          items.push({
+            cid: cids[i],
+            list: JSON.parse(JSON.stringify(ClassData.load(cids[i])))
+          });
+        }
+        return items;
+      }
+
+      /* 记一步「可以撤销的操作」 */
+      function pushUndo(label, items) {
+        undoStack.push({ label: label, items: items });
+        if (undoStack.length > UNDO_LIMIT) undoStack.shift();   // 只留最近几步
+        renderUndoBar();
+      }
+
+      /* 撤销条：没有可撤销的操作时整条隐藏 */
+      function renderUndoBar() {
+        if (undoStack.length === 0) {
+          undoBar.hidden = true;
+          undoText.textContent = '';
+          return;
+        }
+
+        undoText.textContent = '上一步：' + undoStack[undoStack.length - 1].label;
+        undoBar.hidden = false;
+      }
+
+      /* 退回上一步：把快照里的名单原样写回去 */
+      function undoLast() {
+        var entry = undoStack.pop();
+        if (!entry) return;
+
+        var failed = false;
+        var i;
+
+        for (i = 0; i < entry.items.length; i++) {
+          if (!ClassData.save(entry.items[i].cid, entry.items[i].list)) failed = true;
+        }
+
+        // 还原之后，编辑态、勾选和草稿都失效了，一并清掉
+        editingSids = [];
+        selectedSids = [];
+        drafts = {};
+        setSearchEnabled(true);
+
+        all = ClassData.load(classId);
+        render(searchBox.value);
+        renderUndoBar();
+
+        if (failed) {
+          showMsg('撤销时写入本机存储失败，数据可能没有完全还原。', 'error');
+        } else {
+          showMsg('已撤销：' + entry.label, false);
+        }
+      }
+
+      /* ---------- 调整名单顺序 ---------- */
+
+      /*
+        把某位同学在名单里上移 / 下移一格：delta 为 -1 表示上移，+1 表示下移。
+
+        调的是「完整名单」里的位置，所以只在没有搜索时开放
+        （有筛选时按钮是禁用的 —— 否则用户看不见变动，会一头雾水）。
+      */
+      function moveRow(sid, delta) {
+        var student = null;
+        var i;
+
+        for (i = 0; i < all.length; i++) {
+          if (all[i].sid === sid) { student = all[i]; break; }
+        }
+        if (!student) return;
+
+        var ids = all.map(function (s) { return s.sid; });
+        var from = ids.indexOf(sid);
+        var to = from + delta;
+
+        if (to < 0 || to >= ids.length) return;   // 已经在最上面 / 最下面了
+
+        var before = snapshot([classId]);
+
+        ids.splice(from, 1);
+        ids.splice(to, 0, sid);
+
+        if (!ClassData.reorder(classId, ids).ok) {
+          showMsg('排序失败，请检查浏览器是否禁用了本地存储。', 'error');
+          return;
+        }
+
+        all = ClassData.load(classId);
+        pushUndo((delta < 0 ? '上移' : '下移') + '「' + student.name + '」', before);
+        render(searchBox.value);
+      }
+
+      /* ---------- 导出 CSV ---------- */
+
+      /* CSV 单元格：含逗号、引号或换行的内容要用引号包起来，内部的引号写成两个 */
+      function csvCell(value) {
+        var text = value == null ? '' : String(value);
+
+        if (/[",\r\n]/.test(text)) return '"' + text.replace(/"/g, '""') + '"';
+        return text;
+      }
+
+      /* 把文件名里不能出现的字符换成下划线，保证 Windows / macOS 都能存下来 */
+      function safeFileName(name) {
+        return String(name).replace(/[\\/:*?"<>|]/g, '_');
+      }
+
+      /* 触发浏览器下载一个文本文件；浏览器不支持时返回 false */
+      function downloadText(text, fileName) {
+        try {
+          if (typeof Blob === 'undefined' || !window.URL || !window.URL.createObjectURL) {
+            return false;
+          }
+
+          var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+          var url = window.URL.createObjectURL(blob);
+          var link = document.createElement('a');
+
+          link.href = url;
+          link.download = fileName;
+          link.style.display = 'none';
+
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          // 稍后再释放这个临时地址，立刻释放的话有的浏览器会下载失败
+          window.setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      /*
+        把当前显示的名单导出成 CSV。
+
+        导出的是「屏幕上这份」—— 搜索了就只导筛选结果，没搜就是全班；
+        序号沿用完整名单里的位置，和页面上看到的一致。
+        开头加一个 BOM，Excel 打开中文才不会乱码。
+
+        表头写的是「序号 / 姓名 / 性别 / 学号 / 联系方式」——
+        导入功能会按这几个字去认列，所以导出的文件改完能直接导回来，形成闭环。
+      */
+      function exportCsv() {
+        var kw = searchBox.value.trim();
+        var rows = [['序号', '姓名', '性别', '学号', '联系方式']];
+        var i, j;
+
+        for (i = 0; i < all.length; i++) {
+          if (!ClassData.match(all[i], kw)) continue;
+
+          var contact = formatContact(all[i].contact);
+          if (contact === '—') contact = '';   // 没填手机号就留空，别导出个破折号
+
+          rows.push([String(i + 1), all[i].name, all[i].gender || '', all[i].sid, contact]);
+        }
+
+        if (rows.length === 1) {
+          showMsg('当前没有可导出的同学。', 'warn');
+          return;
+        }
+
+        var lines = [];
+        for (i = 0; i < rows.length; i++) {
+          var cells = [];
+          for (j = 0; j < rows[i].length; j++) cells.push(csvCell(rows[i][j]));
+          lines.push(cells.join(','));
+        }
+
+        // 行尾用 \r\n，Excel 和记事本都认
+        var csv = '\ufeff' + lines.join('\r\n') + '\r\n';
+
+        // 文件名形如「某高校-计算机科学与技术 2026 级 1 班.csv」
+        var fileName = safeFileName(ClassData.getSchoolName() + '-' + className) + '.csv';
+
+        // 留给自动化测试读取本次导出的内容（不影响页面功能）
+        window.__lastExportedCsv = csv;
+
+        if (!downloadText(csv, fileName)) {
+          showMsg('当前浏览器不支持直接下载文件，请换用 Chrome / Edge 再试。', 'error');
+          return;
+        }
+
+        showMsg('已导出 ' + (rows.length - 1) + ' 位同学到「' + fileName + '」。'
+          + (kw ? '注意：这是筛选后的结果，不是全班。' : ''), 'info');
+      }
+
+      /* ---------- 批量导入 ---------- */
+
+      /* 解析失败时给用户看的原因（key 是数据层返回的 reason） */
+      var IMPORT_REASONS = {
+        'no-name': '缺姓名',
+        'no-sid': '缺学号',
+        'sid-format': '学号格式不对',
+        'contact-format': '手机号格式不对',
+        'dup-in-file': '表格内学号重复'
+      };
+
+      /* 上一次「识别」的结果，点「确认导入」时用它 */
+      var parsedImport = null;
+
+      /* 当前选的冲突处理方式：'skip'（跳过重复）或 'overwrite'（覆盖重复） */
+      function currentImportMode() {
+        var radios = document.querySelectorAll('input[name="importMode"]');
+
+        for (var i = 0; i < radios.length; i++) {
+          if (radios[i].checked) return radios[i].value;
+        }
+        return 'skip';
+      }
+
+      /* 本班已有的学号 → 那条记录。用来判断导入的每一行是「新增」还是「重复」 */
+      function existingSidMap() {
+        var map = {};
+        for (var i = 0; i < all.length; i++) map[all[i].sid] = all[i];
+        return map;
+      }
+
+      function openImportPanel() {
+        parsedImport = null;
+        importResult.hidden = true;
+        importPreviewBody.textContent = '';
+        importSummary.textContent = '';
+        importPanel.hidden = false;
+        importText.focus();
+      }
+
+      function closeImportPanel() {
+        parsedImport = null;
+        importPanel.hidden = true;
+        importResult.hidden = true;
+        importPreviewBody.textContent = '';
+        importSummary.textContent = '';
+        importFileName.textContent = '未选择文件';
+        importText.value = '';
+        try { importFile.value = ''; } catch (e) { /* 个别浏览器不让清空，忽略 */ }
+      }
+
+      /*
+        把选中的 CSV 文件读进文本框。
+
+        为什么要读进文本框、而不是直接解析文件？
+        ① 用户能亲眼看到读进来的内容，格式不对时自己就能发现；
+        ② 「选文件」和「粘贴」从此走同一条解析路径，少一半代码、少一半出错的地方。
+
+        编码也在这里处理：Excel 另存为 CSV 时，中文版默认是 GBK，
+        直接按 UTF-8 读会整片乱码。所以先按 UTF-8 读一遍，
+        只要出现「替换字符」就说明它不是 UTF-8，再换 GBK 试一次。
+      */
+      function decodeBuffer(buffer) {
+        var utf8;
+
+        try {
+          utf8 = new TextDecoder('utf-8').decode(buffer);
+        } catch (e) {
+          return null;      // 浏览器太老，没有 TextDecoder
+        }
+
+        if (utf8.indexOf('\ufffd') === -1) return utf8;   // 没有乱码，就是它了
+
+        try {
+          return new TextDecoder('gbk').decode(buffer);   // 多半是 Excel 存的 GBK
+        } catch (e) {
+          return utf8;                                    // 认不出 GBK 就先用 UTF-8 的结果
+        }
+      }
+
+      function readImportFile(file) {
+        importFileName.textContent = file.name;
+
+        var reader = new FileReader();
+
+        reader.onload = function () {
+          var text = decodeBuffer(reader.result);
+
+          if (text === null) {
+            showMsg('这个浏览器读不了文件内容，请直接把表格粘贴到下面的框里。', 'error');
+            return;
+          }
+
+          importText.value = text;
+          showMsg('已读入「' + file.name + '」，点「识别」看看能认出哪些同学。', 'info');
+        };
+
+        reader.onerror = function () {
+          showMsg('文件读取失败。可以直接打开 CSV 复制内容，粘贴到下面的框里。', 'error');
+        };
+
+        reader.readAsArrayBuffer(file);
+      }
+
+      /* 识别：解析文本框内容，逐行判定「新增 / 重复 / 无法导入」，并画出预览表 */
+      function doParseImport() {
+        var parsed = ClassData.parseRosterText(importText.value);
+
+        if (!parsed.ok) {
+          showMsg('还没有内容可以识别 —— 先选一个 CSV 文件，或者把表格粘贴到框里。', 'warn');
+          return;
+        }
+
+        var existing = existingSidMap();
+
+        parsed.rows.forEach(function (row) {
+          if (!row.ok) {
+            row.state = 'error';
+          } else if (existing[row.sid]) {
+            row.state = 'dup';
+            row.existingName = existing[row.sid].name;
+          } else {
+            row.state = 'new';
+          }
+        });
+
+        parsedImport = parsed;
+        renderImportPreview(parsed);
+        importResult.hidden = false;
+
+        if (parsed.usable === 0) {
+          showMsg('这一批里没有可以导入的同学，请检查上面的内容格式。', 'warn');
+        } else {
+          showMsg('识别完成，请核对下面的预览再点「确认导入」。', 'info');
+        }
+      }
+
+      /* 画预览表：每一行都列出识别到的内容和判定结果 */
+      function renderImportPreview(parsed) {
+        var mode = currentImportMode();
+        var newCount = 0;
+        var dupCount = 0;
+        var errCount = 0;
+
+        importPreviewBody.textContent = '';
+
+        parsed.rows.forEach(function (row) {
+          var tr = document.createElement('tr');
+          if (row.state === 'error') tr.className = 'import-row-error';
+
+          tr.appendChild(makeTextCell(String(row.line)));
+          tr.appendChild(makeTextCell(row.name || '—'));
+          tr.appendChild(makeTextCell(row.gender || '—'));
+          tr.appendChild(makeTextCell(row.sid || '—'));
+          tr.appendChild(makeTextCell(row.contact ? formatContact(row.contact) : '—'));
+
+          var stateTd = document.createElement('td');
+
+          if (row.state === 'new') {
+            newCount++;
+            stateTd.className = 'import-state import-new';
+            stateTd.textContent = '新增';
+          } else if (row.state === 'dup') {
+            dupCount++;
+            stateTd.className = 'import-state import-dup';
+            stateTd.textContent = '重复 → ' + (mode === 'overwrite' ? '覆盖' : '跳过');
+          } else {
+            errCount++;
+            stateTd.className = 'import-state import-bad';
+            stateTd.textContent = '跳过：' + (IMPORT_REASONS[row.reason] || '格式不对');
+          }
+
+          tr.appendChild(stateTd);
+          importPreviewBody.appendChild(tr);
+        });
+
+        importSummary.textContent = '共识别 ' + parsed.total + ' 行 —— 新增 ' + newCount
+          + ' 位 · 与本班重复 ' + dupCount + ' 位 · 无法导入 ' + errCount + ' 行（'
+          + (parsed.header ? '已按表头对齐列' : '没写表头，按「姓名、性别、学号、手机号」的位置对应')
+          + '）';
+      }
+
+      /* 确认导入 */
+      function doConfirmImport() {
+        if (!parsedImport) {
+          showMsg('请先点「识别」，确认预览无误后再导入。', 'warn');
+          return;
+        }
+
+        var mode = currentImportMode();
+        var good = parsedImport.rows.filter(function (row) { return row.ok; });
+
+        if (good.length === 0) {
+          showMsg('这一批里没有可以导入的同学。', 'warn');
+          return;
+        }
+
+        // 覆盖是唯一会动到「本班原有记录」的动作，所以单独确认一次
+        if (mode === 'overwrite') {
+          var dupCount = parsedImport.rows.filter(function (row) {
+            return row.state === 'dup';
+          }).length;
+
+          if (dupCount > 0) {
+            var yes = window.confirm(
+              '有 ' + dupCount + ' 位同学的学号在本班已经存在。\n\n'
+              + '选择「覆盖」会把这几位原有的姓名、性别、手机号全部换成表格里的内容。\n'
+              + '确定继续吗？'
+            );
+            if (!yes) return;
+          }
+        }
+
+        var before = snapshot([classId]);
+        var result = ClassData.mergeRoster(classId, good, mode);
+
+        if (!result.ok) {
+          showMsg('导入失败，请检查浏览器是否禁用了本地存储。', 'error');
+          return;
+        }
+
+        all = ClassData.load(classId);
+
+        var text = '导入完成：新增 ' + result.added + ' 位';
+        if (result.updated > 0) text += '，覆盖 ' + result.updated + ' 位';
+        if (result.skipped > 0) text += '，因学号重复跳过 ' + result.skipped + ' 位';
+        if (result.invalid > 0) text += '，格式不对丢掉 ' + result.invalid + ' 行';
+        text += '，本班现有 ' + all.length + ' 名同学。';
+
+        if (result.added + result.updated > 0) {
+          pushUndo('导入 ' + (result.added + result.updated) + ' 位同学', before);
+        }
+
+        closeImportPanel();
+        render(searchBox.value);
+
+        // 有跳过或丢掉的，用橙色提示一下，免得用户以为全都进来了
+        showMsg(text, (result.skipped > 0 || result.invalid > 0) ? 'warn' : false);
+      }
+
+      /* ---------- 跨标签页同步 ---------- */
+
+      /*
+        重新从浏览器本地读一遍数据并重绘。
+        「重新加载」按钮和跨标签页自动同步都走这里。
+      */
+      function reloadFromStorage(note) {
+        // 班级本身可能已经在别处被删掉了
+        if (!ClassData.getClass(classId)) {
+          showMsg('这个班级已经在别处被删除，请回首页重新选择班级。', 'error');
+          return;
+        }
+
+        all = ClassData.load(classId);
+        selectedSids = [];
+        drafts = {};
+        render(searchBox.value);
+
+        if (note) showMsg(note, 'info');
+      }
+
+      /*
+        同一个浏览器里，另一个标签页改了数据时浏览器会发来 storage 事件。
+        没在编辑就直接重新加载；正在编辑则只提示一下，不打断手上的输入。
+      */
+      window.addEventListener('storage', function (event) {
+        // 只关心本站在用的那些键（clear() 时 event.key 为 null，也一并处理）
+        if (event.key && event.key.indexOf('classInfoSite.') !== 0) return;
+
+        if (editingSids.length > 0) {
+          showMsg('另一个标签页修改了数据。你正在编辑，保存或取消后点「重新加载」即可看到最新内容。', 'warn');
+          return;
+        }
+
+        reloadFromStorage('检测到另一个标签页的改动，已自动刷新。');
+      });
+
+      /* ---------- 单独删除 / 批量操作 ---------- */
+
+      /* 删除一位同学。会先弹窗确认；删完还能用顶部的「撤销」退回 */
+      function deleteOne(student) {
+        var yes = window.confirm(
+          '确定要删除「' + student.name + '（学号 ' + student.sid + '）」吗？\n\n'
+          + '删完可以用页面顶部的「撤销」退回。'
+        );
+
+        if (!yes) return;
+
+        var before = snapshot([classId]);   // 先留一份，删成功后才真的记成「可撤销的一步」
+        var result = ClassData.remove(classId, student.sid);
+
+        if (!result.ok) {
+          showMsg('删除失败，请检查浏览器是否禁用了本地存储。', 'error');
+          return;
+        }
+
+        // 这位同学如果正被勾选，从选择里去掉
+        selectedSids = selectedSids.filter(function (sid) { return sid !== student.sid; });
+
+        all = ClassData.load(classId);
+        pushUndo('删除「' + student.name + '」', before);
+        render(searchBox.value);
+        renderBulkBar();
+        showMsg('已删除「' + student.name + '」，本班现剩 ' + all.length + ' 名同学。', false);
+      }
+
+      /* 勾选 / 取消勾选一位同学 */
+      function toggleSelect(sid, checked) {
+        if (checked) {
+          if (selectedSids.indexOf(sid) === -1) selectedSids.push(sid);
+        } else {
+          selectedSids = selectedSids.filter(function (s) { return s !== sid; });
+        }
+        renderBulkBar();
+      }
+
+      /* 清空选择（换搜索词、做完一次批量操作之后都要调） */
+      function clearSelection() {
+        selectedSids = [];
+        renderBulkBar();
+      }
+
+      /* 把选择状态同步到每一行的勾选框上（用「全选」勾之后需要） */
+      function syncRowChecks() {
+        var boxes = tbody.querySelectorAll('.row-check');
+
+        for (var i = 0; i < boxes.length; i++) {
+          var sid = boxes[i].getAttribute('data-sid');
+          boxes[i].checked = selectedSids.indexOf(sid) > -1;
+        }
+      }
+
+      /* 批量操作条：一个人都没选时整条隐藏 */
+      function renderBulkBar() {
+        var visibleBoxes = tbody.querySelectorAll('.row-check');
+        var i, visibleSids = [];
+
+        for (i = 0; i < visibleBoxes.length; i++) {
+          if (!visibleBoxes[i].disabled) visibleSids.push(visibleBoxes[i].getAttribute('data-sid'));
+        }
+
+        if (selectedSids.length === 0) {
+          bulkBar.hidden = true;
+          bulkCount.textContent = '';
+          checkAll.checked = false;
+          checkAll.indeterminate = false;
+          return;
+        }
+
+        bulkBar.hidden = false;
+        bulkCount.textContent = '已选 ' + selectedSids.length + ' 人';
+
+        // 表头那个全选框：全选中就打勾，选中一部分显示为「半选」
+        checkAll.checked = visibleSids.length > 0 && selectedSids.length >= visibleSids.length;
+        checkAll.indeterminate = selectedSids.length > 0 && selectedSids.length < visibleSids.length;
+
+        // 目标班级下拉只在第一次需要时构建，之后保留用户已经选好的那个
+        // （否则每勾一个人就被重置一次，很烦）
+        if (moveMajorSel.options.length === 0) {
+          renderMoveOptions();
+        }
+      }
+
+      /*
+        「移动到」用的目标班级下拉：结构和首页的选班器一样，
+        先选专业、再选班级；目标里不含「当前所在的这个班」（自己搬给自己没意义）。
+      */
+      function renderMoveOptions() {
+        var majors = ClassData.listMajors();
+
+        moveMajorSel.textContent = '';
+        majors.forEach(function (major) {
+          var option = document.createElement('option');
+          option.value = major;
+          option.textContent = major;
+          moveMajorSel.appendChild(option);
+        });
+
+        // 默认停在「当前班所在专业」，用户少点一下
+        moveMajorSel.value = majors.indexOf(cls.major) > -1 ? cls.major : (majors[0] || '');
+
+        renderMoveClasses(moveMajorSel.value, '');
+      }
+
+      function renderMoveClasses(major, selected) {
+        var classes = ClassData.listClassesByMajor(major).filter(function (c) {
+          return c.id !== classId;      // 不能把同学「移动」到他本来就在的班
+        });
+
+        moveClassSel.textContent = '';
+
+        if (classes.length === 0) {
+          var empty = document.createElement('option');
+          empty.value = '';
+          empty.textContent = '（该专业没有别的班）';
+          moveClassSel.appendChild(empty);
+          moveClassSel.disabled = true;
+          return;
+        }
+
+        moveClassSel.disabled = false;
+        classes.forEach(function (c) {
+          var option = document.createElement('option');
+          option.value = c.id;
+          option.textContent = c.grade + ' 级 ' + c.name;
+          moveClassSel.appendChild(option);
+        });
+
+        var ids = classes.map(function (c) { return c.id; });
+        moveClassSel.value = (selected && ids.indexOf(selected) > -1) ? selected : classes[0].id;
+      }
+
+      /* 把选中的人整体搬到另一个班 */
+      function doBulkMove() {
+        var toId = moveClassSel.disabled ? '' : moveClassSel.value;
+        var target = ClassData.getClass(toId);
+
+        if (!target) {
+          showMsg('请先在上方选好要移动到哪个班级。', 'error');
+          return;
+        }
+
+        var targetName = ClassData.getClassName(target);
+
+        var yes = window.confirm(
+          '确定把选中的 ' + selectedSids.length + ' 位同学\n\n'
+          + '从「' + className + '」移动到「' + targetName + '」吗？'
+        );
+
+        if (!yes) return;
+
+        // 跨班移动要能同时还原两个班，所以快照把目标班也带上
+        var before = snapshot([classId, toId]);
+        var result = ClassData.moveStudents(classId, toId, selectedSids);
+
+        if (!result.ok) {
+          if (result.reason === 'conflict') {
+            showMsg('这些同学的学号在目标班里已经有人用了，所以一个都没搬：'
+              + result.conflict.join('、') + '。', 'warn');
+          } else {
+            showMsg('移动失败，请检查浏览器是否禁用了本地存储。', 'error');
+          }
+          return;
+        }
+
+        // 移动成功：清空选择，重新读数据后重绘
+        selectedSids = [];
+        all = ClassData.load(classId);
+        pushUndo('把 ' + result.moved + ' 位同学移动到「' + targetName + '」', before);
+        render(searchBox.value);
+        renderBulkBar();
+
+        var text = '已把 ' + result.moved + ' 位同学移动到「' + targetName + '」，'
+          + '本班现剩 ' + all.length + ' 名同学。';
+
+        if (result.conflict.length > 0) {
+          text += ' 另有 ' + result.conflict.length + ' 位因学号在目标班已存在而留在本班（'
+            + result.conflict.join('、') + '）。';
+          showMsg(text, 'warn');
+        } else {
+          showMsg(text, false);
+        }
+      }
+
+      /* 批量删除选中的同学 */
+      function doBulkDelete() {
+        var yes = window.confirm(
+          '确定要删除选中的 ' + selectedSids.length + ' 位同学吗？\n\n'
+          + '删完可以用页面顶部的「撤销」退回。'
+        );
+
+        if (!yes) return;
+
+        var before = snapshot([classId]);
+        var result = ClassData.removeMany(classId, selectedSids);
+
+        if (!result.ok) {
+          showMsg('删除失败，请检查浏览器是否禁用了本地存储。', 'error');
+          return;
+        }
+
+        var n = result.removed;
+        selectedSids = [];
+        all = ClassData.load(classId);
+        pushUndo('删除 ' + n + ' 位同学', before);
+        render(searchBox.value);
+        renderBulkBar();
+        showMsg('已删除 ' + n + ' 位同学，本班现剩 ' + all.length + ' 名同学。', false);
       }
 
       /* ---------- 渲染整张表 ---------- */
@@ -564,6 +1548,9 @@
         var kw = (keyword || '').trim();
         var shown = 0;
 
+        // 编辑中的草稿先收起来，重建完再填回去（否则用户敲的内容会被抹掉）
+        drafts = collectDrafts();
+
         tbody.textContent = '';       // 清空旧内容，重新生成
 
         all.forEach(function (student, index) {
@@ -571,58 +1558,128 @@
           shown++;
 
           var tr = document.createElement('tr');
-          var editing = (student.sid === editingSid);
+          var editing = editingSids.indexOf(student.sid) > -1;
+          var draft = drafts[student.sid] || {};
 
           if (editing) tr.className = 'row-editing';
 
-          // 第一格永远是序号
+          /* ----- 第一格：勾选框（打印时不显示） ----- */
+          var checkTd = document.createElement('td');
+          checkTd.className = 'col-check no-print';
+
+          var box = document.createElement('input');
+          box.type = 'checkbox';
+          box.className = 'row-check';
+          box.setAttribute('data-sid', student.sid);
+          box.checked = selectedSids.indexOf(student.sid) > -1;
+          box.disabled = editing;   // 正在改的行先不给勾，免得"刚改完学号又被批量搬走"
+          box.setAttribute('aria-label', '选择 ' + student.name);
+          box.addEventListener('change', function () {
+            toggleSelect(student.sid, this.checked);
+          });
+          checkTd.appendChild(box);
+          tr.appendChild(checkTd);
+
+          // 第二格永远是序号
           tr.appendChild(makeTextCell(String(index + 1)));
 
           if (editing) {
-            /* ===== 编辑状态：三个字段换成输入框，操作列换成「保存 / 取消」 ===== */
+            /* ===== 编辑状态：四个字段换掉，操作列换成「保存 / 取消」 =====
+               姓名 / 学号 / 手机号变成输入框，性别变成下拉框；
+               内容优先取草稿，没有草稿才用数据层里的原值。 */
 
             var nameTd = document.createElement('td');
-            nameTd.appendChild(makeInput('editName', student.name, '姓名', 30));
+            nameTd.appendChild(makeInput(
+              student.sid, 'name',
+              draft.name !== undefined ? draft.name : student.name,
+              '姓名', 30));
+
+            var genderTd = document.createElement('td');
+            genderTd.className = 'col-gender';
+            genderTd.appendChild(makeSelect(
+              student.sid, 'gender',
+              draft.gender !== undefined ? draft.gender : (student.gender || ''),
+              '性别', GENDER_OPTIONS));
 
             var sidTd = document.createElement('td');
-            sidTd.appendChild(makeInput('editSid', student.sid, '学号', 10, 'numeric'));
+            sidTd.appendChild(makeInput(
+              student.sid, 'sid',
+              draft.sid !== undefined ? draft.sid : student.sid,
+              '学号', ClassData.SID_MAX,
+              ClassData.SID_ALLOW_LETTER ? 'text' : 'numeric'));
 
             var contactTd = document.createElement('td');
-            contactTd.appendChild(makeInput('editContact', student.contact, '手机号', 11, 'numeric'));
+            contactTd.appendChild(makeInput(
+              student.sid, 'contact',
+              draft.contact !== undefined ? draft.contact : student.contact,
+              '手机号', 11, 'numeric'));
 
             var actionTd = document.createElement('td');
             actionTd.className = 'col-action no-print';
             actionTd.appendChild(makeButton('保存', 'btn-save', '保存该同学的信息', function () {
-              saveEdit(student.sid);
+              saveEdit(tr, student.sid);
             }));
-            actionTd.appendChild(makeButton('取消', 'btn-cancel', '放弃修改', cancelEdit));
+            actionTd.appendChild(makeButton('取消', 'btn-cancel', '放弃修改', function () {
+              cancelEdit([student.sid]);
+            }));
 
             tr.appendChild(nameTd);
+            tr.appendChild(genderTd);
             tr.appendChild(sidTd);
             tr.appendChild(contactTd);
             tr.appendChild(actionTd);
 
-            // 键盘操作：回车 = 保存，Esc = 取消
+            // 键盘操作：回车 = 保存这一行，Esc = 取消这一行
             tr.addEventListener('keydown', function (event) {
               if (event.key === 'Enter') {
                 event.preventDefault();
-                saveEdit(student.sid);
+                saveEdit(tr, student.sid);
               } else if (event.key === 'Escape') {
                 event.preventDefault();
-                cancelEdit();
+                cancelEdit([student.sid]);
               }
             });
           } else {
-            /* ===== 普通状态：只读展示 + 一个「编辑」按钮 ===== */
+            /* ===== 普通状态：只读展示 + 「上移」「下移」「编辑」「删除」 ===== */
 
             tr.appendChild(makeTextCell(student.name));
+
+            // 性别是选填的，没填的显示成破折号，免得出现一个空格子
+            var genderCell = makeTextCell(student.gender || '—');
+            genderCell.className = 'col-gender';
+            tr.appendChild(genderCell);
+
             tr.appendChild(makeTextCell(student.sid));
             tr.appendChild(makeTextCell(formatContact(student.contact)));
 
             var td = document.createElement('td');
             td.className = 'col-action no-print';
+
+            /*
+              调整顺序的两个按钮：只在「没有搜索筛选」时才给。
+              因为排的是完整名单里的位置，筛选状态下看不到全貌，点了会一头雾水。
+            */
+            if (!kw) {
+              var upBtn = makeButton('上移', 'btn-move', '把 ' + student.name + ' 上移一位', function () {
+                moveRow(student.sid, -1);
+              });
+              var downBtn = makeButton('下移', 'btn-move', '把 ' + student.name + ' 下移一位', function () {
+                moveRow(student.sid, 1);
+              });
+
+              // 已经在最上面 / 最下面时，对应的按钮置灰
+              if (index === 0) upBtn.disabled = true;
+              if (index === all.length - 1) downBtn.disabled = true;
+
+              td.appendChild(upBtn);
+              td.appendChild(downBtn);
+            }
+
             td.appendChild(makeButton('编辑', 'btn-edit', '修改 ' + student.name + ' 的信息', function () {
-              startEdit(student.sid);
+              startEdit([student.sid]);
+            }));
+            td.appendChild(makeButton('删除', 'btn-del', '删除 ' + student.name, function () {
+              deleteOne(student);
             }));
 
             tr.appendChild(td);
@@ -633,34 +1690,172 @@
 
         // 一条都没匹配上时给出提示，避免出现空表格让人以为页面坏了
         if (shown === 0) {
-          var tr = document.createElement('tr');
-          var td = document.createElement('td');
-          td.colSpan = 5;            // 一共五列，让提示文字横跨整行
-          td.className = 'empty-tip';
-          td.textContent = all.length === 0
+          var emptyTr = document.createElement('tr');
+          var emptyTd = document.createElement('td');
+          emptyTd.colSpan = 7;       // 一共七列，让提示文字横跨整行
+          emptyTd.className = 'empty-tip';
+          emptyTd.textContent = all.length === 0
             ? '这个班还没有名单数据，请到「信息录入」页添加第一位同学。'
             : '没有匹配的同学，换个关键词试试。';
-          tr.appendChild(td);
-          tbody.appendChild(tr);
+          emptyTr.appendChild(emptyTd);
+          tbody.appendChild(emptyTr);
         }
 
         // 底部统计文字
         countEl.textContent = kw
           ? '筛选出 ' + shown + ' 名同学（本班共 ' + all.length + ' 名）'
-          : '本班共 ' + all.length + ' 名同学 · 数据保存在本机浏览器，点右侧「编辑」可修改';
+          : '本班共 ' + all.length + ' 名同学 · 数据保存在本机浏览器，可修改、删除、排序、导入导出，也可勾选后批量操作';
+
+        renderBulkBar();   // 勾选状态跟着表格一起刷新
       }
 
-      // 输入即筛选（不需要按回车）
+      // 输入即筛选（不需要按回车）。
+      // 换关键词会顺带清空勾选 —— 否则被筛掉的同学仍然算「已选中」，
+      // 批量操作会作用到屏幕上看不见的行上，容易误删。
       searchBox.addEventListener('input', function () {
+        clearSelection();
         render(this.value);
+      });
+
+      /* 表头「全选」：勾上 = 选中当前显示的全部同学，勾掉 = 只取消这些 */
+      checkAll.addEventListener('change', function () {
+        var boxes = tbody.querySelectorAll('.row-check');
+        var visibleSids = [];
+        var i;
+
+        for (i = 0; i < boxes.length; i++) {
+          if (!boxes[i].disabled) visibleSids.push(boxes[i].getAttribute('data-sid'));
+        }
+
+        if (checkAll.checked) {
+          visibleSids.forEach(function (sid) {
+            if (selectedSids.indexOf(sid) === -1) selectedSids.push(sid);
+          });
+        } else {
+          selectedSids = selectedSids.filter(function (sid) {
+            return visibleSids.indexOf(sid) === -1;
+          });
+        }
+
+        syncRowChecks();
+        renderBulkBar();
+      });
+
+      // 「移动到」里换专业 → 目标班级下拉跟着换
+      moveMajorSel.addEventListener('change', function () {
+        renderMoveClasses(moveMajorSel.value, '');
+      });
+
+      // 批量修改：让勾选的行同时进入编辑态，各自保存
+      document.getElementById('bulkEdit').addEventListener('click', function () {
+        var sids = selectedSids.slice();
+        clearSelection();     // 收起批量条，专心改这几行
+        startEdit(sids);
+      });
+
+      document.getElementById('bulkMove').addEventListener('click', doBulkMove);
+      document.getElementById('bulkDelete').addEventListener('click', doBulkDelete);
+
+      // 取消选择：清空勾选，并把每行的勾选框也同步过来
+      document.getElementById('bulkClear').addEventListener('click', function () {
+        clearSelection();
+        syncRowChecks();
+      });
+
+      // 撤销上一步（删除 / 移动 / 修改 / 排序）
+      document.getElementById('undoBtn').addEventListener('click', undoLast);
+
+      // 把当前显示的名单导出成 CSV
+      document.getElementById('exportCsv').addEventListener('click', exportCsv);
+
+      /*
+        按学号排序：真的改名单顺序，所以排完可以用「撤销」退回。
+        三种情况先拦下来 —— 人太少没意义、正在编辑会被打断、筛选状态下看不到全貌。
+      */
+      document.getElementById('sortBtn').addEventListener('click', function () {
+        if (all.length < 2) {
+          showMsg('至少要有两位同学才谈得上排序。', 'info');
+          return;
+        }
+        if (editingSids.length > 0) {
+          showMsg('有几位同学正在编辑中，请先保存或取消，再排序。', 'warn');
+          return;
+        }
+        if (searchBox.value.trim()) {
+          showMsg('当前正在筛选显示，请先清空搜索框再排序 —— 否则顺序已经变了，你却看不出全貌。', 'warn');
+          return;
+        }
+
+        var before = snapshot([classId]);
+        var result = ClassData.sortBySid(classId);
+
+        if (!result.ok) {
+          showMsg('排序失败，请检查浏览器是否禁用了本地存储。', 'error');
+          return;
+        }
+
+        all = ClassData.load(classId);
+        pushUndo('按学号排序', before);
+        render('');
+
+        showMsg('已按学号从小到大重排 ' + result.count
+          + ' 位同学。想退回原来的顺序，点上面的「撤销」。', false);
+      });
+
+      /* ---------- 批量导入面板的交互 ---------- */
+
+      // 工具条上的「导入」：开着就关掉，关着就打开
+      document.getElementById('importBtn').addEventListener('click', function () {
+        if (importPanel.hidden) openImportPanel();
+        else closeImportPanel();
+      });
+
+      document.getElementById('importClose').addEventListener('click', closeImportPanel);
+      document.getElementById('importParse').addEventListener('click', doParseImport);
+      document.getElementById('importConfirm').addEventListener('click', doConfirmImport);
+
+      // 「重新识别」：收回预览，让用户改完上面的内容再识别一次
+      document.getElementById('importBack').addEventListener('click', function () {
+        parsedImport = null;
+        importResult.hidden = true;
+        importPreviewBody.textContent = '';
+        importSummary.textContent = '';
+        importText.focus();
+      });
+
+      // 选文件 → 读进文本框，之后和「粘贴」走同一条解析路径
+      importFile.addEventListener('change', function () {
+        var file = importFile.files && importFile.files[0];
+        if (file) readImportFile(file);
+      });
+
+      // 换冲突处理方式 → 预览表里的判定文字跟着从「跳过」变「覆盖」
+      var importRadios = document.querySelectorAll('input[name="importMode"]');
+      for (var ir = 0; ir < importRadios.length; ir++) {
+        importRadios[ir].addEventListener('change', function () {
+          if (parsedImport) renderImportPreview(parsedImport);
+        });
+      }
+
+      // 重新加载：手动拉取别处做的改动。编辑中会先问一句，避免白改一场
+      document.getElementById('reloadBtn').addEventListener('click', function () {
+        if (editingSids.length > 0) {
+          var yes = window.confirm('还有没保存的修改，重新加载会丢弃它们。确定继续吗？');
+          if (!yes) return;
+
+          editingSids = [];
+          drafts = {};
+          setSearchEnabled(true);
+        }
+        reloadFromStorage('已重新加载本机保存的数据。');
       });
 
       /*
         还没保存就关掉页面 / 跳走时提醒一下，免得白改一场。
-        只在编辑状态下生效，正常浏览不受影响。
+        只在有行处于编辑状态时生效，正常浏览不受影响。
       */
       window.addEventListener('beforeunload', function (event) {
-        if (editingSid !== null) {
+        if (editingSids.length > 0) {
           event.preventDefault();
           event.returnValue = '';   // 部分浏览器需要设置它才会弹出确认框
         }
